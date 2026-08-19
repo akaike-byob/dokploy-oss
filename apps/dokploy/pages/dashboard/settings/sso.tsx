@@ -6,6 +6,7 @@ import superjson from "superjson";
 import { ToggleEnforceSSO } from "@/components/dashboard/settings/servers/actions/toggle-enforce-sso";
 import { ToggleRemoteServersOnly } from "@/components/dashboard/settings/servers/actions/toggle-remote-servers-only";
 import { DashboardLayout } from "@/components/layouts/dashboard-layout";
+import { GoogleAuthSettings } from "@/components/proprietary/auth/google-auth-settings";
 import { EnterpriseFeatureGate } from "@/components/proprietary/enterprise-feature-gate";
 import { ForwardAuthServers } from "@/components/proprietary/sso/forward-auth-servers";
 import { SSOSettings } from "@/components/proprietary/sso/sso-settings";
@@ -26,6 +27,11 @@ const Page = ({ isCloud }: Props) => {
 	return (
 		<div className="w-full">
 			<div className="h-full rounded-xl max-w-5xl mx-auto flex flex-col gap-4">
+				<Card className="h-full bg-sidebar p-2.5 rounded-xl mx-auto w-full">
+					<div className="rounded-xl bg-background shadow-md">
+						<GoogleAuthSettings />
+					</div>
+				</Card>
 				<Card className="h-full bg-sidebar p-2.5 rounded-xl mx-auto w-full">
 					<div className="rounded-xl bg-background shadow-md">
 						<EnterpriseFeatureGate

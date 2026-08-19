@@ -112,6 +112,10 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   `lib/sso-trusted-origins.ts`. The SSO plugin will not fetch a discovery document from an origin
   missing from `trustedOrigins`, and Dokploy keeps that list on the owner's user row with no UI to
   edit it, so no external identity provider could otherwise be registered at all.
+  It also rebuilds the social providers from the credentials stored in `socialAuthProvider` on the
+  endpoints that resolve one, from `lib/social-auth-providers.ts`. better-auth builds its provider
+  list once, out of the options the instance was created with, so credentials registered from the
+  panel would otherwise take effect only after a restart.
 - `LICENSE.MD`, and `NOTICE` - carry the full Apache-2.0 text and the statement of changes that
   Apache-2.0 section 4 requires of a public distribution. `LICENSE_PROPRIETARY.md` is absent, since
   no code it applies to is present.
@@ -127,6 +131,11 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   and the repository URLs as build arguments declared after the expensive layers.
   `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
   as it compiles, so it cannot be changed on a running container.
+- `apps/dokploy/drizzle/` and its `meta/_journal.json` - carry one migration of this fork's own,
+  for the `socialAuthProvider` table. Upstream numbers its migrations sequentially, so a sync brings
+  files whose numbers collide with it. The filenames differ by their generated slug and coexist;
+  only the journal conflicts, and it is resolved by keeping both entries. Application order follows
+  each entry's `when` timestamp, not its index, so leave those untouched.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
   to Docker Hub; `pull-request.yml` is upstream's, unchanged.
@@ -146,16 +155,26 @@ matching replacement module.
 ## Panel sign-in
 
 Google and GitHub sign-in run on better-auth's own social providers, configured in the
-Apache-licensed `packages/server/src/lib/auth.ts`. Set the credentials as environment variables on
-the panel:
+Apache-licensed `packages/server/src/lib/auth.ts`.
+
+Register the Google OAuth client under **Settings -> SSO -> Google Sign-In**. It is stored in the
+`socialAuthProvider` table and applies to the next sign-in, so a panel already running gains the
+button without a restart.
+
+Credentials may also be supplied as environment variables, which is how a panel provisioned before
+it had an admin gets its first client:
 
 ```
 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 ```
 
+Anything registered from the panel wins over the environment for that provider. GitHub is
+configurable through the environment only; the storage and the override are generic, so giving it
+the same panel form is a matter of rendering one.
+
 The OAuth redirect URI is `https://<panel-domain>/api/auth/callback/google`. A button appears only
-when its provider's credentials are set.
+when its provider has an OAuth client from either source.
 
 A Google identity links to an existing account with the same email address. Creating a new account
 through Google is still subject to the panel's own rule that, once an owner exists, only an invited

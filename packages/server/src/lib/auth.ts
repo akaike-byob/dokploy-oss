@@ -18,6 +18,7 @@ import {
 	getUserByToken,
 } from "../services/admin";
 import { createAuditLog } from "../services/proprietary/audit-log";
+import { storedSocialCredentials } from "../services/social-auth";
 import {
 	getWebServerSettings,
 	updateWebServerSettings,
@@ -30,6 +31,10 @@ import {
 import { getPublicIpWithFallback } from "../wss/utils";
 import { ac, adminRole, memberRole, ownerRole } from "./access-control";
 import { betterAuthSecret } from "./auth-secret";
+import {
+	resolvesSocialProvider,
+	withStoredCredentials,
+} from "./social-auth-providers";
 import {
 	registeredIssuerOrigins,
 	registrationOrigins,
@@ -145,6 +150,15 @@ const createBetterAuth = () =>
 								: []),
 						]
 					: [];
+				// Social credentials registered from the panel live in the database, so the
+				// provider better-auth was built with at startup has to be rebuilt from them
+				// before a handler resolves it; social-auth-providers.ts lists those endpoints.
+				if (resolvesSocialProvider(ctx.path)) {
+					ctx.context.socialProviders = withStoredCredentials(
+						ctx.context.socialProviders,
+						await storedSocialCredentials(),
+					);
+				}
 				ctx.context.trustedOrigins = [
 					...(ctx.context.baseURL ? [new URL(ctx.context.baseURL).origin] : []),
 					...(await resolveTrustedOrigins()),
