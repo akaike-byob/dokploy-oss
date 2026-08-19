@@ -13,9 +13,9 @@ import {
 	sendDokployRestartNotifications,
 	setupDirectories,
 } from "@dokploy/server";
+import { PANEL_VERSION } from "@dokploy/server/services/panel-build";
 import { config } from "dotenv";
 import next from "next";
-import packageInfo from "../package.json";
 import { setupDockerContainerLogsWebSocketServer } from "./wss/docker-container-logs";
 import { setupDockerContainerTerminalWebSocketServer } from "./wss/docker-container-terminal";
 import { setupDockerStatsMonitoringSocketServer } from "./wss/docker-stats";
@@ -41,7 +41,7 @@ const app = next({ dev, turbopack: process.env.TURBOPACK === "1" });
 const handle = app.getRequestHandler();
 void app.prepare().then(async () => {
 	try {
-		console.log("Running DokployVersion: ", packageInfo.version);
+		console.log("Running panel version: ", PANEL_VERSION);
 		const server = http.createServer((req, res) => {
 			handle(req, res);
 		});

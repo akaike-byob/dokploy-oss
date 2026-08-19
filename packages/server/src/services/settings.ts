@@ -14,7 +14,7 @@ import {
 	initializeTraefikService,
 	type TraefikOptions,
 } from "../setup/traefik-setup";
-import { PANEL_IMAGE, panelImageTagsUrl } from "./panel-image";
+import { PANEL_IMAGE, panelImageTagsUrl } from "./panel-build";
 export interface IUpdateData {
 	latestVersion: string | null;
 	updateAvailable: boolean;
