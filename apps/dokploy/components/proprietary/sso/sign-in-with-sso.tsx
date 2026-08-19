@@ -2,13 +2,20 @@ import { KeyRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { api } from "@/utils/api";
+
+/** "portal" reads as "Continue with Portal"; an id is lowercase and hyphenated by validation. */
+const providerLabel = (providerId: string) =>
+	providerId
+		.split("-")
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ");
 
 /**
- * Sign-in through an OIDC provider registered under Settings -> SSO. The email address picks
- * the provider: better-auth routes it by the email domain the provider was registered with.
+ * Sign-in through an OIDC provider registered under Settings -> SSO. Each registered provider
+ * gets its own button and is named directly, so nothing has to be typed: better-auth can route
+ * by email domain, but the domain only ever selects a provider the panel already knows about.
  *
  * `enforce` renders the SSO route on its own, for panels configured to require it. Otherwise
  * the usual login form is rendered alongside.
@@ -20,80 +27,47 @@ export const SignInWithSSO = ({
 	enforce?: boolean;
 	children?: ReactNode;
 }) => {
-	const [email, setEmail] = useState("");
-	const [isRedirecting, setIsRedirecting] = useState(false);
-	const [isPrompting, setIsPrompting] = useState(Boolean(enforce));
+	const { data: providers } = api.sso.signInOptions.useQuery();
+	const [redirectingTo, setRedirectingTo] = useState<string | null>(null);
 
-	const startSSOSignIn = async () => {
-		if (!email.trim()) {
-			toast.error("Enter your work email address");
-			return;
-		}
-
-		setIsRedirecting(true);
+	const startSSOSignIn = async (providerId: string) => {
+		setRedirectingTo(providerId);
 		try {
 			const { error } = await authClient.signIn.sso({
-				email: email.trim(),
+				providerId,
 				callbackURL: "/dashboard/home",
 			});
 			if (error) {
-				toast.error(
-					error.message || "No SSO provider matches that email domain",
-				);
-				setIsRedirecting(false);
+				toast.error(error.message || "Could not start SSO sign-in");
+				setRedirectingTo(null);
 			}
 		} catch {
 			toast.error("Could not start SSO sign-in");
-			setIsRedirecting(false);
+			setRedirectingTo(null);
 		}
 	};
 
-	const prompt = (
-		<div className="flex flex-col gap-2">
-			<Label htmlFor="sso-email">Work email</Label>
-			<Input
-				id="sso-email"
-				type="email"
-				placeholder="you@example.com"
-				value={email}
-				onChange={(event) => setEmail(event.target.value)}
-				onKeyDown={(event) => {
-					if (event.key === "Enter") {
-						event.preventDefault();
-						startSSOSignIn();
-					}
-				}}
-			/>
-			<Button
-				type="button"
-				className="w-full"
-				isLoading={isRedirecting}
-				onClick={startSSOSignIn}
-			>
-				Continue with SSO
-			</Button>
-		</div>
-	);
+	const buttons = (providers ?? []).map((provider) => (
+		<Button
+			key={provider.providerId}
+			type="button"
+			variant="outline"
+			className="w-full gap-2"
+			isLoading={redirectingTo === provider.providerId}
+			onClick={() => startSSOSignIn(provider.providerId)}
+		>
+			<KeyRound className="size-4" />
+			Continue with {providerLabel(provider.providerId)}
+		</Button>
+	));
 
 	if (enforce) {
-		return prompt;
+		return <div className="flex flex-col gap-2">{buttons}</div>;
 	}
 
 	return (
 		<div className="flex flex-col gap-4">
-			{isPrompting ? (
-				prompt
-			) : (
-				<Button
-					type="button"
-					variant="outline"
-					className="w-full gap-2"
-					onClick={() => setIsPrompting(true)}
-				>
-					<KeyRound className="size-4" />
-					Continue with SSO
-				</Button>
-			)}
+			<div className="flex flex-col gap-2">{buttons}</div>
 			{children}
 		</div>
 	);
