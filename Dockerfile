@@ -6,13 +6,26 @@ RUN corepack enable
 RUN corepack prepare pnpm@10.22.0 --activate
 
 FROM base AS build
-COPY . /usr/src/app
 WORKDIR /usr/src/app
 
+# Toolchain for the native modules. Nothing here depends on the source, so the layer survives
+# every source change.
 RUN apt-get update && apt-get install -y python3 make g++ git python3-pip pkg-config libsecret-1-dev && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Manifests before sources. Installing dependencies, which compiles native modules, is by far
+# the slowest step, and copying the whole tree first made it rerun on every edit to any file.
+# Copied on their own, it reruns only when the dependency set actually changes.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/dokploy/package.json apps/dokploy/
+COPY apps/schedules/package.json apps/schedules/
+COPY packages/server/package.json packages/server/
+COPY packages/server/src/emails/package.json packages/server/src/emails/
+
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+
+# node_modules is excluded by .dockerignore, so this cannot clobber what was just installed.
+COPY . .
 
 # Deploy only the dokploy app
 
@@ -63,6 +76,12 @@ RUN curl -sSL https://railpack.com/install.sh | bash
 
 # Install buildpacks
 COPY --from=buildpacksio/pack:0.39.1 /usr/local/bin/pack /usr/local/bin/pack
+
+# Declared last: the value changes on every build, and anything after an ARG is rebuilt, so it
+# must sit past the expensive layers. The panel reports this as its version and compares it
+# against the published tags to decide whether an update exists.
+ARG PANEL_VERSION
+ENV PANEL_VERSION=$PANEL_VERSION
 
 EXPOSE 3000
 

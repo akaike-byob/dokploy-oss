@@ -111,10 +111,16 @@ Upstream files edited here, and therefore the only places a sync can conflict:
 - `LICENSE.MD`, and `NOTICE` - carry the full Apache-2.0 text and the statement of changes that
   Apache-2.0 section 4 requires of a public distribution. `LICENSE_PROPRIETARY.md` is absent, since
   no code it applies to is present.
-- `packages/server/src/services/settings.ts`, `apps/dokploy/server/api/routers/settings.ts` - name
-  the panel image through `services/panel-image.ts` instead of hardcoding `dokploy/dokploy`.
+- `packages/server/src/services/settings.ts`, `apps/dokploy/server/api/routers/settings.ts`,
+  `apps/dokploy/server/server.ts` - take the panel's image and version from
+  `services/panel-build.ts` instead of hardcoding `dokploy/dokploy` and reading `package.json`.
   Upstream's "Update Available" button runs `docker service update --image dokploy/dokploy:<v>`,
   which on a fork replaces the running panel with upstream and silently undoes it.
+- `apps/dokploy/components/layouts/side.tsx` - drops the "Enterprise" badge. It rendered whenever
+  the licence check reported access, which here is always, and this fork has no such tier.
+- `Dockerfile` - installs dependencies from the manifests before copying the sources, so a source
+  change no longer reruns `pnpm install` and its native compilation, and takes `PANEL_VERSION` as
+  a build argument declared after the expensive layers.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
   to GHCR; `pull-request.yml` is upstream's, unchanged.

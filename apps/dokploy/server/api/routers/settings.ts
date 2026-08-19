@@ -47,7 +47,10 @@ import {
 	writeTraefikSetup,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
-import { PANEL_IMAGE } from "@dokploy/server/services/panel-image";
+import {
+	PANEL_IMAGE,
+	PANEL_VERSION,
+} from "@dokploy/server/services/panel-build";
 import { checkPermission } from "@dokploy/server/services/permission";
 import { generateOpenApiDocument } from "@dokploy/trpc-openapi";
 import { TRPCError } from "@trpc/server";
@@ -72,7 +75,6 @@ import {
 } from "@/server/db/schema";
 import { cleanAllDeploymentQueue } from "@/server/queues/queueSetup";
 import { removeJob, schedule } from "@/server/utils/backup";
-import packageInfo from "../../../package.json";
 import { appRouter } from "../root";
 import {
 	adminProcedure,
@@ -94,7 +96,7 @@ export const settingsRouter = createTRPCRouter({
 		if (IS_CLOUD) {
 			return true;
 		}
-		await reloadDockerResource("dokploy", undefined, packageInfo.version);
+		await reloadDockerResource("dokploy", undefined, PANEL_VERSION);
 		await audit(ctx, {
 			action: "reload",
 			resourceType: "settings",
@@ -549,14 +551,14 @@ export const settingsRouter = createTRPCRouter({
 			return DEFAULT_UPDATE_DATA;
 		}
 
-		return await getUpdateData(packageInfo.version);
+		return await getUpdateData(PANEL_VERSION);
 	}),
 	updateServer: adminProcedure.mutation(async ({ ctx }) => {
 		if (IS_CLOUD) {
 			return true;
 		}
 
-		const data = await getUpdateData(packageInfo.version);
+		const data = await getUpdateData(PANEL_VERSION);
 		if (data.updateAvailable) {
 			void spawnAsync("docker", [
 				"service",
@@ -577,7 +579,7 @@ export const settingsRouter = createTRPCRouter({
 	}),
 
 	getDokployVersion: protectedProcedure.query(() => {
-		return packageInfo.version;
+		return PANEL_VERSION;
 	}),
 	getReleaseTag: protectedProcedure.query(() => {
 		return getDokployImageTag();
@@ -661,7 +663,7 @@ export const settingsRouter = createTRPCRouter({
 			const url = `${protocol}://${ctx.req.headers.host}/api`;
 			const openApiDocument = generateOpenApiDocument(appRouter, {
 				title: "tRPC OpenAPI",
-				version: packageInfo.version,
+				version: PANEL_VERSION,
 				baseUrl: url,
 				docsUrl: `${url}/settings.getOpenApiDocument`,
 				tags: [
@@ -714,7 +716,7 @@ export const settingsRouter = createTRPCRouter({
 			openApiDocument.info = {
 				title: "Dokploy API",
 				description: "Endpoints for dokploy",
-				version: packageInfo.version,
+				version: PANEL_VERSION,
 			};
 
 			// Add security schemes configuration
