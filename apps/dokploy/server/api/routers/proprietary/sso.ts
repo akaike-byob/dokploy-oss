@@ -1,6 +1,15 @@
 import { db } from "@dokploy/server/db";
-import { ssoProvider } from "@dokploy/server/db/schema";
+import {
+	socialAuthCredentialsSchema,
+	ssoProvider,
+} from "@dokploy/server/db/schema";
 import { auth } from "@dokploy/server/lib/auth";
+import {
+	isSocialProviderConfigured,
+	removeSocialAuthCredentials,
+	saveSocialAuthCredentials,
+	socialAuthClientId,
+} from "@dokploy/server/services/social-auth";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -33,7 +42,7 @@ const requireAdmin = (role: string) => {
 	if (role !== "owner" && role !== "admin") {
 		throw new TRPCError({
 			code: "FORBIDDEN",
-			message: "Only an owner or admin can manage SSO providers",
+			message: "Only an owner or admin can manage sign-in providers",
 		});
 	}
 };
@@ -128,19 +137,38 @@ export const ssoRouter = createTRPCRouter({
 		}),
 
 	/**
-	 * Whether the panel is configured to offer "Continue with Google". The credentials are read
-	 * server-side by better-auth (`packages/server/src/lib/auth.ts`); this only reports whether
-	 * they are present so the login page can hide the button when they are not.
+	 * Whether the panel is configured to offer "Continue with Google", from either an OAuth
+	 * client registered below or one supplied through the environment. Only the answer is
+	 * public: the login page uses it to decide whether to render the button.
 	 */
-	isGoogleEnabled: publicProcedure.query(
-		() =>
-			Boolean(process.env.GOOGLE_CLIENT_ID) &&
-			Boolean(process.env.GOOGLE_CLIENT_SECRET),
+	isGoogleEnabled: publicProcedure.query(() =>
+		isSocialProviderConfigured("google"),
 	),
 
-	isGithubEnabled: publicProcedure.query(
-		() =>
-			Boolean(process.env.GITHUB_CLIENT_ID) &&
-			Boolean(process.env.GITHUB_CLIENT_SECRET),
+	isGithubEnabled: publicProcedure.query(() =>
+		isSocialProviderConfigured("github"),
 	),
+
+	/**
+	 * The OAuth client the panel authenticates Google sign-in with, and where it came from.
+	 * The client secret is never returned: it is write-only from here on.
+	 */
+	googleClient: protectedProcedure.query(({ ctx }) => {
+		requireAdmin(ctx.user.role);
+		return socialAuthClientId("google");
+	}),
+
+	saveGoogleClient: protectedProcedure
+		.input(socialAuthCredentialsSchema.omit({ providerId: true }))
+		.mutation(async ({ ctx, input }) => {
+			requireAdmin(ctx.user.role);
+			await saveSocialAuthCredentials({ providerId: "google", ...input });
+			return { providerId: "google" as const };
+		}),
+
+	removeGoogleClient: protectedProcedure.mutation(async ({ ctx }) => {
+		requireAdmin(ctx.user.role);
+		await removeSocialAuthCredentials("google");
+		return { providerId: "google" as const };
+	}),
 });

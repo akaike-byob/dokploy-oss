@@ -28,8 +28,8 @@ const GoogleMark = () => (
 
 /**
  * Panel sign-in through Google, backed by the better-auth Google provider configured in
- * `packages/server/src/lib/auth.ts`. Renders nothing unless GOOGLE_CLIENT_ID and
- * GOOGLE_CLIENT_SECRET are set on the server.
+ * `packages/server/src/lib/auth.ts`. Renders nothing until an OAuth client is configured,
+ * either under Settings -> SSO or through GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
  *
  * Google identities link to an existing account with the same email. Creating a brand new
  * account this way is still subject to the panel's own rule that only an invited user may
