@@ -30,6 +30,14 @@ COPY . .
 # Deploy only the dokploy app
 
 ENV NODE_ENV=production
+
+# Next.js inlines NEXT_PUBLIC_* into the client bundle as it compiles, so the repository the
+# panel links to on the login and crash pages is fixed here and cannot be changed by setting an
+# environment variable on the running container. Declared immediately before the build it
+# affects, so a fork overriding it does not rebuild the dependency layers.
+ARG NEXT_PUBLIC_PANEL_REPO_URL
+ENV NEXT_PUBLIC_PANEL_REPO_URL=$NEXT_PUBLIC_PANEL_REPO_URL
+
 RUN pnpm --filter=@dokploy/server build
 RUN pnpm --filter=./apps/dokploy run build
 
@@ -86,6 +94,12 @@ COPY --from=build /prod/dokploy/node_modules ./node_modules
 # against the published tags to decide whether an update exists.
 ARG PANEL_VERSION
 ENV PANEL_VERSION=$PANEL_VERSION
+
+# Defaulted from the same build as the client bundle above, so a fork's server-side and
+# client-side links agree without configuring anything. Unlike the client value this one is read
+# at runtime, so setting it on the container still works.
+ARG PANEL_REPO_URL
+ENV PANEL_REPO_URL=$PANEL_REPO_URL
 
 EXPOSE 3000
 
