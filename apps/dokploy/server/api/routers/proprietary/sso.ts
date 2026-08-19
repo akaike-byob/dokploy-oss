@@ -47,6 +47,19 @@ export const ssoRouter = createTRPCRouter({
 		return Boolean(provider);
 	}),
 
+	/**
+	 * The providers the login page offers, so signing in is one click rather than typing an
+	 * address to be routed by its domain. Only the provider id is exposed: it already appears
+	 * in the callback URL registered with the identity provider, whereas the issuer, the email
+	 * domain and the organization it belongs to are not public.
+	 */
+	signInOptions: publicProcedure.query(() =>
+		db.query.ssoProvider.findMany({
+			columns: { providerId: true },
+			orderBy: ssoProvider.createdAt,
+		}),
+	),
+
 	all: protectedProcedure.query(({ ctx }) =>
 		db.query.ssoProvider.findMany({
 			where: eq(ssoProvider.organizationId, ctx.session.activeOrganizationId),

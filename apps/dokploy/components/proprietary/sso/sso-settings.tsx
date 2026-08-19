@@ -57,6 +57,7 @@ export const SSOSettings = () => {
 			setDraft(emptyProvider);
 			await utils.sso.all.invalidate();
 			await utils.sso.showSignInWithSSO.invalidate();
+			await utils.sso.signInOptions.invalidate();
 		} catch (error) {
 			toast.error(
 				error instanceof Error
@@ -72,6 +73,7 @@ export const SSOSettings = () => {
 			toast.success("SSO provider removed");
 			await utils.sso.all.invalidate();
 			await utils.sso.showSignInWithSSO.invalidate();
+			await utils.sso.signInOptions.invalidate();
 		} catch (error) {
 			toast.error(
 				error instanceof Error
