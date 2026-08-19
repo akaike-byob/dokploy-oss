@@ -57,11 +57,22 @@ The OAuth redirect URI is `https://<panel-domain>/api/auth/callback/google`. A b
 when its provider is configured. A Google identity links to an existing account with the same email
 address; once an owner exists, creating a new account still requires an invitation.
 
+**OIDC single sign-on** works too, against any standards-compliant provider. Register one under
+**Settings -> SSO** as an owner or admin: provider ID, the email domain it serves, the issuer URL,
+and a client ID and secret. Endpoints are read from the issuer's discovery document unless you give
+an explicit discovery endpoint. Sign-in is then routed by email domain, so a user enters their work
+address and lands at the right provider.
+
+Register the redirect URI the settings page shows, which is
+`https://<panel-domain>/api/auth/sso/callback/<provider-id>`.
+
+Providers can only be added by an authenticated owner or admin. better-auth's own
+`/sso/register` HTTP endpoint stays disabled, as upstream ships it.
+
 **Audit logs** are recorded and viewable.
 
-**Not implemented:** SSO against arbitrary OIDC/SAML providers, SCIM provisioning, custom roles,
-whitelabeling, and putting deployed applications behind an auth gate. The panel says so where each
-would appear.
+**Not implemented:** SAML, SCIM provisioning, custom roles, whitelabeling, and putting deployed
+applications behind an auth gate. The panel says so where each would appear.
 
 There is **no licence tier and no licence server**, so features whose logic lives in the
 Apache-licensed code are simply available.

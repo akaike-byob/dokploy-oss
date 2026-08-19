@@ -17,9 +17,9 @@ Changes made relative to upstream commit ef0272a4ecd886a7e62cd3b65dd22a010cd36b6
     upstream licensed under the Apache License, Version 2.0.
   - Modules supplying the interfaces that code provided were written for this
     fork and placed at the same import paths. They implement panel sign-in
-    through Google and GitHub, and audit logging. SSO against arbitrary identity
-    providers, SCIM, custom roles, whitelabeling and application forward auth are
-    not implemented. No licence gating is performed.
+    through Google, GitHub and OIDC single sign-on, and audit logging. SAML,
+    SCIM, custom roles, whitelabeling and application forward auth are not
+    implemented. No licence gating is performed.
   - apps/dokploy/pages/index.tsx and apps/dokploy/pages/register.tsx render the
     social sign-in buttons on self-hosted panels.
   - Release automation targets this fork's own container registry.
