@@ -23,6 +23,9 @@ Changes made relative to upstream commit ef0272a4ecd886a7e62cd3b65dd22a010cd36b6
   - apps/dokploy/pages/index.tsx and apps/dokploy/pages/register.tsx render the
     social sign-in buttons on self-hosted panels.
   - Release automation targets this fork's own container registry.
+  - install.sh provisions a host and generates the database password into a
+    Docker secret, rather than using the shared default compiled into the
+    upstream source. apps/dokploy/provision-host.ts exists for that reason.
 
 UPSTREAM.md records the base commit and the procedure for syncing upstream
 changes.

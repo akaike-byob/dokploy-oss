@@ -93,6 +93,10 @@ the first account, which becomes the owner.
 
 Requirements: a Linux host on amd64 or arm64, with ports 80, 443 and 3000 free.
 
+The database password is generated per installation and kept in a Docker secret, so no two
+installations share one. Postgres is never published outside the internal overlay network. An
+installation that already has a Postgres service keeps it untouched, credentials included.
+
 To upgrade, re-run the same command; it updates the service in place. To pin a version, set
 `IMAGE=ghcr.io/akaike-byob/dokploy-oss:<tag>`.
 

@@ -26,6 +26,7 @@ try {
 				server: "server/server.ts",
 				migration: "migration.ts",
 				setup: "setup.ts",
+				"provision-host": "provision-host.ts",
 				"wait-for-postgres": "wait-for-postgres.ts",
 				"reset-password": "reset-password.ts",
 				"reset-2fa": "reset-2fa.ts",

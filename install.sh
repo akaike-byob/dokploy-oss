@@ -13,6 +13,7 @@ set -euo pipefail
 IMAGE="${IMAGE:-ghcr.io/akaike-byob/dokploy-oss:latest}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 BASE_PATH="${BASE_PATH:-/etc/dokploy}"
+DB_SECRET="dokploy-postgres-password"
 
 log()  { echo "  $*"; }
 ok()   { echo "✅ $*"; }
@@ -89,15 +90,43 @@ run_bootstrap() {
 
 	mkdir -p "$BASE_PATH"
 
-	# The image ships the app's own bootstrap: it creates the directory layout, the default
-	# Traefik configuration and the Traefik and Postgres services.
-	log "Running bootstrap (Traefik, Postgres, config)..."
+	# Directory layout, default Traefik configuration and Traefik itself. Postgres is handled
+	# separately so this installer owns its password.
+	log "Provisioning the host (Traefik, config)..."
 	docker run --rm \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v "${BASE_PATH}:${BASE_PATH}" \
 		-e NODE_ENV=production \
-		"$IMAGE" node -r dotenv/config dist/setup.mjs
-	ok "Bootstrap complete"
+		"$IMAGE" node -r dotenv/config dist/provision-host.mjs
+	ok "Host provisioned"
+}
+
+# Postgres reads its password from a Docker secret. The password is generated here, so no two
+# installations share one.
+init_postgres() {
+	if docker service inspect dokploy-postgres >/dev/null 2>&1; then
+		ok "Postgres already running, left as it is"
+		return
+	fi
+
+	if ! docker secret inspect "$DB_SECRET" >/dev/null 2>&1; then
+		openssl rand -hex 32 | tr -d "\n" | docker secret create "$DB_SECRET" - >/dev/null
+		ok "Generated the database password"
+	fi
+
+	log "Starting Postgres..."
+	docker service create \
+		--name dokploy-postgres \
+		--replicas 1 \
+		--network dokploy-network \
+		--constraint 'node.role==manager' \
+		--secret "$DB_SECRET" \
+		--env POSTGRES_USER=dokploy \
+		--env POSTGRES_DB=dokploy \
+		--env POSTGRES_PASSWORD_FILE="/run/secrets/${DB_SECRET}" \
+		--mount type=volume,source=dokploy-postgres,target=/var/lib/postgresql/data \
+		postgres:16 >/dev/null
+	ok "Postgres started"
 }
 
 deploy_panel() {
@@ -108,10 +137,19 @@ deploy_panel() {
 		return
 	fi
 
+	local db_args=()
+	if docker secret inspect "$DB_SECRET" >/dev/null 2>&1; then
+		db_args=(
+			--secret "$DB_SECRET"
+			--env POSTGRES_PASSWORD_FILE="/run/secrets/${DB_SECRET}"
+		)
+	fi
+
 	log "Deploying the panel..."
 	docker service create \
 		--name dokploy \
 		--replicas 1 \
+		${db_args[@]+"${db_args[@]}"} \
 		--network dokploy-network \
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
 		--mount type=bind,source="${BASE_PATH}",target="${BASE_PATH}" \
@@ -132,6 +170,7 @@ main() {
 	init_swarm
 	init_network
 	run_bootstrap
+	init_postgres
 	deploy_panel
 
 	local addr="${ADVERTISE_ADDR:-$(detect_ip)}"
