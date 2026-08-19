@@ -30,6 +30,10 @@ import {
 import { getPublicIpWithFallback } from "../wss/utils";
 import { ac, adminRole, memberRole, ownerRole } from "./access-control";
 import { betterAuthSecret } from "./auth-secret";
+import {
+	registeredIssuerOrigins,
+	registrationOrigins,
+} from "./sso-trusted-origins";
 
 const resolveTrustedOrigins = async () => {
 	try {
@@ -123,9 +127,28 @@ const createBetterAuth = () =>
 		trustedOrigins: resolveTrustedOrigins,
 		hooks: {
 			before: createAuthMiddleware(async (ctx) => {
+				// An SSO provider's issuer has to be a trusted origin before its discovery
+				// document can be fetched; lib/sso-trusted-origins.ts explains why that trust is
+				// scoped to /sso rather than granted on every auth endpoint.
+				const ssoOrigins = ctx.path?.startsWith("/sso")
+					? [
+							...registeredIssuerOrigins(
+								await db
+									.select({
+										issuer: schema.ssoProvider.issuer,
+										oidcConfig: schema.ssoProvider.oidcConfig,
+									})
+									.from(schema.ssoProvider),
+							),
+							...(ctx.path === "/sso/register"
+								? registrationOrigins(ctx.body)
+								: []),
+						]
+					: [];
 				ctx.context.trustedOrigins = [
 					...(ctx.context.baseURL ? [new URL(ctx.context.baseURL).origin] : []),
 					...(await resolveTrustedOrigins()),
+					...ssoOrigins,
 				].filter(Boolean);
 			}),
 		},
