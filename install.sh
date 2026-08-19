@@ -6,11 +6,11 @@ set -euo pipefail
 #   curl -sSL https://raw.githubusercontent.com/akaike-byob/dokploy-oss/main/install.sh | bash
 #
 # Overrides:
-#   IMAGE=ghcr.io/akaike-byob/dokploy-oss:latest   image to deploy
+#   IMAGE=ujjwalakaike/dokploy-oss:latest              image to deploy
 #   ADVERTISE_ADDR=1.2.3.4                         swarm advertise address
 #   PANEL_PORT=3000                                port the panel listens on
 
-IMAGE="${IMAGE:-ghcr.io/akaike-byob/dokploy-oss:latest}"
+IMAGE="${IMAGE:-ujjwalakaike/dokploy-oss:latest}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 BASE_PATH="${BASE_PATH:-/etc/dokploy}"
 DB_SECRET="dokploy-postgres-password"

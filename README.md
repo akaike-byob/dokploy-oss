@@ -86,7 +86,7 @@ curl -sSL https://raw.githubusercontent.com/akaike-byob/dokploy-oss/main/install
 ```
 
 That installs Docker if missing, initializes a swarm, and brings up Traefik, Postgres and the panel
-from `ghcr.io/akaike-byob/dokploy-oss`. When it finishes, open `http://<server-ip>:3000` and create
+from `ujjwalakaike/dokploy-oss`. When it finishes, open `http://<server-ip>:3000` and create
 the first account, which becomes the owner.
 
 > Create the owner account immediately. Until one exists, whoever can reach the panel can register.
@@ -98,7 +98,7 @@ installations share one. Postgres is never published outside the internal overla
 installation that already has a Postgres service keeps it untouched, credentials included.
 
 To upgrade, re-run the same command; it updates the service in place. To pin a version, set
-`IMAGE=ghcr.io/akaike-byob/dokploy-oss:<tag>`.
+`IMAGE=ujjwalakaike/dokploy-oss:<tag>`.
 
 Note that upstream's own installer at `dokploy.com/install.sh` deploys upstream Dokploy, not this
 fork. Upstream's documentation at [docs.dokploy.com](https://docs.dokploy.com) applies to everything
