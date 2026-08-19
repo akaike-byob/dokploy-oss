@@ -101,8 +101,13 @@ Upstream files edited here, and therefore the only places a sync can conflict:
 - `apps/dokploy/pages/index.tsx`, `apps/dokploy/pages/register.tsx` - drop a cloud-only condition so
   the Google and GitHub sign-in buttons render on a self-hosted panel. The buttons decide for
   themselves whether to appear, based on whether the provider is configured.
-- `apps/dokploy/esbuild.config.ts` - builds `setup.ts` into `dist/setup.mjs`, so the published image
-  can run the app's own host bootstrap. `install.sh` depends on this.
+- `apps/dokploy/esbuild.config.ts` - builds `setup.ts` into `dist/setup.mjs` and this fork's
+  `provision-host.ts` into `dist/provision-host.mjs`, so the published image can run the app's own
+  host bootstrap. `install.sh` depends on both.
+- `packages/server/src/lib/auth.ts` - sets `requireLocalEmailVerified` to `IS_CLOUD`. better-auth
+  defaults it to true and then refuses to link a social identity to an existing account whose email
+  is unverified. A self-hosted panel disables email verification, so every local account stays
+  unverified and every first Google or SSO sign-in would fail with "account not linked".
 - `LICENSE.MD`, and `NOTICE` - carry the full Apache-2.0 text and the statement of changes that
   Apache-2.0 section 4 requires of a public distribution. `LICENSE_PROPRIETARY.md` is absent, since
   no code it applies to is present.

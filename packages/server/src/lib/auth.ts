@@ -98,6 +98,12 @@ const createBetterAuth = () =>
 					return ["github", "google", ...fromDb];
 				},
 				allowDifferentEmails: true,
+				// better-auth otherwise refuses to link a social identity to an existing account
+				// whose email is unverified, and a self-hosted panel never verifies one: email
+				// verification is disabled outside cloud, so every local account stays unverified
+				// and every first Google or SSO sign-in fails with "account not linked".
+				// The identity still has to come from a trusted provider that verified the address.
+				requireLocalEmailVerified: IS_CLOUD,
 			},
 		},
 		appName: "Dokploy",
