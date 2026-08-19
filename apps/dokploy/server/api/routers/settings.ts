@@ -47,6 +47,7 @@ import {
 	writeTraefikSetup,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
+import { PANEL_IMAGE } from "@dokploy/server/services/panel-image";
 import { checkPermission } from "@dokploy/server/services/permission";
 import { generateOpenApiDocument } from "@dokploy/trpc-openapi";
 import { TRPCError } from "@trpc/server";
@@ -562,7 +563,7 @@ export const settingsRouter = createTRPCRouter({
 				"update",
 				"--force",
 				"--image",
-				`dokploy/dokploy:${data.latestVersion}`,
+				`${PANEL_IMAGE}:${data.latestVersion}`,
 				"dokploy",
 			]);
 			await audit(ctx, {

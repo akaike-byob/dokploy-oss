@@ -100,6 +100,9 @@ installation that already has a Postgres service keeps it untouched, credentials
 To upgrade, re-run the same command; it updates the service in place. To pin a version, set
 `IMAGE=ujjwalakaike/dokploy-oss:<tag>`.
 
+The panel's own "Update Available" button updates to **this** image, not upstream's. Point it
+somewhere else with `PANEL_IMAGE`.
+
 Note that upstream's own installer at `dokploy.com/install.sh` deploys upstream Dokploy, not this
 fork. Upstream's documentation at [docs.dokploy.com](https://docs.dokploy.com) applies to everything
 in the Apache-licensed core; ignore its enterprise sections.
