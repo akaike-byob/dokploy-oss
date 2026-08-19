@@ -1,10 +1,9 @@
 > **This is a modified fork of [Dokploy](https://github.com/Dokploy/dokploy), not affiliated with or
 > endorsed by Dokploy Technology, Inc.**
 >
-> It carries only the Apache License 2.0 portion of upstream. The source-available `/proprietary`
-> directories are not present, and the enterprise features they implement are replaced by local
-> ones: Google sign-in is built directly on better-auth's social provider, and the license gate is
-> removed rather than circumvented.
+> It carries only the Apache License 2.0 portion of upstream. Upstream's source-available
+> `/proprietary` directories are not present; this fork supplies its own modules at those import
+> paths. What that changes is described in [Differences from upstream](#differences-from-upstream).
 >
 > Upstream base commit and the sync procedure: [`UPSTREAM.md`](./UPSTREAM.md).
 
@@ -42,17 +41,44 @@ Dokploy includes multiple features to make your life easier.
 - **Multi Server**: Deploy and manage your applications remotely to external servers.
 - **Self-Hosted**: Self-host Dokploy on your VPS.
 
+## Differences from upstream
+
+Panel sign-in with **Google** and **GitHub** works here without a licence. It runs on better-auth's
+own social providers, which upstream already configures in the Apache-licensed code; this fork adds
+the buttons and lets them render on a self-hosted panel. Set the credentials as environment
+variables:
+
+```
+GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
+```
+
+The OAuth redirect URI is `https://<panel-domain>/api/auth/callback/google`. A button appears only
+when its provider is configured. A Google identity links to an existing account with the same email
+address; once an owner exists, creating a new account still requires an invitation.
+
+**Audit logs** are recorded and viewable.
+
+**Not implemented:** SSO against arbitrary OIDC/SAML providers, SCIM provisioning, custom roles,
+whitelabeling, and putting deployed applications behind an auth gate. The panel says so where each
+would appear.
+
+There is **no licence tier and no licence server**, so features whose logic lives in the
+Apache-licensed code are simply available.
+
 ## 🚀 Getting Started
 
-To get started, run the following command on a VPS:
-
-Want to skip the installation process? [Try the Dokploy Cloud](https://app.dokploy.com).
+Upstream's installer deploys upstream Dokploy, not this fork:
 
 ```bash
 curl -sSL https://dokploy.com/install.sh | bash
 ```
 
-For detailed documentation, visit [docs.dokploy.com](https://docs.dokploy.com).
+To run this fork, install as above to get the host set up, then build and deploy this repository's
+image in place of `dokploy/dokploy`.
+
+Upstream's documentation at [docs.dokploy.com](https://docs.dokploy.com) applies to everything in
+the Apache-licensed core; ignore its enterprise sections.
 
 
 [Github Sponsors](https://github.com/sponsors/Siumauricio)
