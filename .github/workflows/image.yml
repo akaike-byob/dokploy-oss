@@ -14,9 +14,8 @@ env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/dokploy-oss
 
 jobs:
-  # Every merge to main gets its own version, derived from the upstream base this fork sits on
-  # plus the run number. Semver orders those prereleases numerically, so each build is newer
-  # than the last, and rebasing onto a newer upstream raises the base and stays ordered.
+  # Every merge to main gets its own version. The rules it has to satisfy, and why a plain
+  # prerelease of the base does not, are in scripts/panel-version.mjs, which is unit tested.
   version:
     runs-on: ubuntu-latest
     outputs:
@@ -25,10 +24,10 @@ jobs:
       - uses: actions/checkout@v4
       - id: compute
         run: |
-          BASE=$(node -p "require('./apps/dokploy/package.json').version" | sed 's/^v//')
-          VERSION="${BASE}-akaike.${{ github.run_number }}"
+          BASE=$(node -p "require('./apps/dokploy/package.json').version")
+          VERSION=$(node apps/dokploy/scripts/panel-version.mjs "$BASE" "${{ github.run_number }}")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building version ${VERSION}"
+          echo "Building version ${VERSION} from base ${BASE}"
 
   build:
     needs: [version]
