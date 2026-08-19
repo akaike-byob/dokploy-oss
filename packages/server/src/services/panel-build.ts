@@ -20,3 +20,14 @@ export const PANEL_VERSION =
 /** Docker Hub tag listing for PANEL_IMAGE, used to discover the latest published version. */
 export const panelImageTagsUrl = () =>
 	`https://hub.docker.com/v2/repositories/${PANEL_IMAGE}/tags`;
+
+/**
+ * Where this panel's source lives. Upstream points its release notes, issue tracker and email
+ * artwork at Dokploy/dokploy, which on a fork describes a build the operator is not running.
+ */
+export const PANEL_REPO_URL =
+	process.env.PANEL_REPO_URL || "https://github.com/akaike-byob/dokploy-oss";
+
+/** Logo shown in notification emails, served from the repo the running build came from. */
+export const panelLogoUrl = () =>
+	`${PANEL_REPO_URL.replace("github.com", "raw.githubusercontent.com")}/refs/heads/main/apps/dokploy/logo.png`;

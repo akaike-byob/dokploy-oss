@@ -12,6 +12,7 @@ import {
 	Tailwind,
 	Text,
 } from "@react-email/components";
+import { panelLogoUrl } from "../../services/panel-build";
 import { emailTailwindConfig } from "../tailwind-config";
 
 export type TemplateProps = {
@@ -41,9 +42,7 @@ export const BuildFailedEmail = ({
 					<Container className="border border-solid border-[#eaeaea] rounded-lg my-[40px] mx-auto p-[20px] max-w-[465px]">
 						<Section className="mt-[32px]">
 							<Img
-								src={
-									"https://raw.githubusercontent.com/Dokploy/dokploy/refs/heads/canary/apps/dokploy/logo.png"
-								}
+								src={panelLogoUrl()}
 								width="100"
 								height="50"
 								alt="Dokploy"

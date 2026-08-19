@@ -42,6 +42,7 @@ import {
 	updateTelegramNotification,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
+import { PANEL_REPO_URL } from "@dokploy/server/services/panel-build";
 import { TRPCError } from "@trpc/server";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -670,7 +671,7 @@ export const notificationRouter = createTRPCRouter({
 					input,
 					"Test Notification",
 					"",
-					"view, visit Dokploy on Github, https://github.com/dokploy/dokploy, clear=true;",
+					`view, visit this panel on GitHub, ${PANEL_REPO_URL}, clear=true;`,
 					"Hi, From Dokploy 👋",
 				);
 				return true;

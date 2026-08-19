@@ -2,6 +2,7 @@ import type { NextPageContext } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { buttonVariants } from "@/components/ui/button";
+import { panelIssuesUrl } from "@/lib/panel-repo";
 import { useWhitelabelingPublic } from "@/utils/hooks/use-whitelabeling";
 
 interface Props {
@@ -79,7 +80,7 @@ export default function ErrorPage({ statusCode }: Props) {
 								whitelabeling.footerText
 							) : (
 								<Link
-									href="https://github.com/Dokploy/dokploy/issues"
+									href={panelIssuesUrl}
 									target="_blank"
 									className="underline hover:text-primary transition-colors"
 								>
