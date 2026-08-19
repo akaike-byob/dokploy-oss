@@ -1,0 +1,28 @@
+Dokploy
+Copyright 2026-present Dokploy Technology, Inc.
+
+This product includes software developed by Dokploy Technology, Inc.
+(https://github.com/Dokploy/dokploy), licensed under the Apache License,
+Version 2.0.
+
+Modifications copyright 2026-present Akaike Technologies.
+
+This is a modified fork and is not affiliated with, nor endorsed by, Dokploy
+Technology, Inc. "Dokploy" is upstream's name and is not claimed here.
+
+Changes made relative to upstream commit ef0272a4ecd886a7e62cd3b65dd22a010cd36b62:
+
+  - Upstream's source-available code, which it keeps under directories named
+    "proprietary", is not included. This repository carries only the portion of
+    upstream licensed under the Apache License, Version 2.0.
+  - Modules supplying the interfaces that code provided were written for this
+    fork and placed at the same import paths. They implement panel sign-in
+    through Google and GitHub, and audit logging. SSO against arbitrary identity
+    providers, SCIM, custom roles, whitelabeling and application forward auth are
+    not implemented. No licence gating is performed.
+  - apps/dokploy/pages/index.tsx and apps/dokploy/pages/register.tsx render the
+    social sign-in buttons on self-hosted panels.
+  - Release automation targets this fork's own container registry.
+
+UPSTREAM.md records the base commit and the procedure for syncing upstream
+changes.

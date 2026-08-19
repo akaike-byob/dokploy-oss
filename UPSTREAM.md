@@ -96,10 +96,21 @@ patch, while every upstream file that imports them resolves without being edited
 upstream outside those directories stays close to empty, which is what makes a sync a fast-forward
 rather than a merge exercise.
 
-Two upstream files are edited: `apps/dokploy/pages/index.tsx` and `apps/dokploy/pages/register.tsx`
-each drop a cloud-only condition so the Google and GitHub sign-in buttons render on a self-hosted
-panel. The buttons decide for themselves whether to appear, based on whether the provider is
-configured.
+Upstream files edited here, and therefore the only places a sync can conflict:
+
+- `apps/dokploy/pages/index.tsx`, `apps/dokploy/pages/register.tsx` - drop a cloud-only condition so
+  the Google and GitHub sign-in buttons render on a self-hosted panel. The buttons decide for
+  themselves whether to appear, based on whether the provider is configured.
+- `apps/dokploy/esbuild.config.ts` - builds `setup.ts` into `dist/setup.mjs`, so the published image
+  can run the app's own host bootstrap. `install.sh` depends on this.
+- `LICENSE.MD`, and `NOTICE` - carry the full Apache-2.0 text and the statement of changes that
+  Apache-2.0 section 4 requires of a public distribution. `LICENSE_PROPRIETARY.md` is absent, since
+  no code it applies to is present.
+- `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
+  pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
+  to GHCR; `pull-request.yml` is upstream's, unchanged.
+
+Take upstream's changes to any of these deliberately rather than by default.
 
 After a sync, re-check that imports still resolve:
 

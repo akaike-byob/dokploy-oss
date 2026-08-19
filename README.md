@@ -68,17 +68,26 @@ Apache-licensed code are simply available.
 
 ## 🚀 Getting Started
 
-Upstream's installer deploys upstream Dokploy, not this fork:
+On a fresh Linux VM, as root:
 
 ```bash
-curl -sSL https://dokploy.com/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/akaike-byob/dokploy-oss/main/install.sh | bash
 ```
 
-To run this fork, install as above to get the host set up, then build and deploy this repository's
-image in place of `dokploy/dokploy`.
+That installs Docker if missing, initializes a swarm, and brings up Traefik, Postgres and the panel
+from `ghcr.io/akaike-byob/dokploy-oss`. When it finishes, open `http://<server-ip>:3000` and create
+the first account, which becomes the owner.
 
-Upstream's documentation at [docs.dokploy.com](https://docs.dokploy.com) applies to everything in
-the Apache-licensed core; ignore its enterprise sections.
+> Create the owner account immediately. Until one exists, whoever can reach the panel can register.
+
+Requirements: a Linux host on amd64 or arm64, with ports 80, 443 and 3000 free.
+
+To upgrade, re-run the same command; it updates the service in place. To pin a version, set
+`IMAGE=ghcr.io/akaike-byob/dokploy-oss:<tag>`.
+
+Note that upstream's own installer at `dokploy.com/install.sh` deploys upstream Dokploy, not this
+fork. Upstream's documentation at [docs.dokploy.com](https://docs.dokploy.com) applies to everything
+in the Apache-licensed core; ignore its enterprise sections.
 
 
 [Github Sponsors](https://github.com/sponsors/Siumauricio)
