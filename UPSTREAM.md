@@ -123,11 +123,13 @@ Upstream files edited here, and therefore the only places a sync can conflict:
 - `apps/dokploy/components/layouts/side.tsx` - drops the "Enterprise" badge. It rendered whenever
   the licence check reported access, which here is always, and this fork has no such tier.
 - `Dockerfile` - installs dependencies from the manifests before copying the sources, so a source
-  change no longer reruns `pnpm install` and its native compilation, and takes `PANEL_VERSION` as
-  a build argument declared after the expensive layers.
+  change no longer reruns `pnpm install` and its native compilation, and takes `PANEL_VERSION`
+  and the repository URLs as build arguments declared after the expensive layers.
+  `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
+  as it compiles, so it cannot be changed on a running container.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
-  to GHCR; `pull-request.yml` is upstream's, unchanged.
+  to Docker Hub; `pull-request.yml` is upstream's, unchanged.
 
 Take upstream's changes to any of these deliberately rather than by default.
 

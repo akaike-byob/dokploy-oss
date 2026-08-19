@@ -68,6 +68,8 @@ jobs:
           push: true
           build-args: |
             PANEL_VERSION=${{ needs.version.outputs.version }}
+            NEXT_PUBLIC_PANEL_REPO_URL=${{ github.server_url }}/${{ github.repository }}
+            PANEL_REPO_URL=${{ github.server_url }}/${{ github.repository }}
           tags: ${{ env.IMAGE_NAME }}:build-${{ matrix.arch }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
