@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# A superseded build of the same ref is wasted work: this image takes a long time to build.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
 
