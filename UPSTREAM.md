@@ -58,14 +58,72 @@ This clone keeps upstream's objects locally so patches can be generated. Only `m
 publish. Push it by name and never with `--all` or `--mirror`, which would carry local branches that
 do contain upstream history.
 
-Before any push to a new remote, confirm no proprietary blob is reachable:
+Before any push to a new remote, confirm no upstream source-available blob is reachable. The
+directories named `proprietary` in this repository hold this fork's own replacement modules (see
+below), so the check lists what is reachable and expects only those paths:
 
 ```sh
-git rev-list --objects main | grep proprietary   # must print nothing
+git rev-list --objects main | grep proprietary | awk '{print $2}' | sort -u
 ```
 
-Upstream files that import from a proprietary path are replaced here by local implementations. When
-a sync touches one of those files, re-check that its imports still resolve.
+Every path it prints must be a file listed in one of the three replacement READMEs.
+
+## Replacement modules
+
+Upstream's Apache-licensed code imports its enterprise features from three directories named
+`proprietary`. Those imports are part of the Apache-licensed files, so stripping the enterprise code
+leaves them dangling.
+
+This fork answers them with its own implementations placed at the same module paths:
+
+```
+apps/dokploy/components/proprietary/
+apps/dokploy/server/api/routers/proprietary/
+packages/server/src/services/proprietary/
+```
+
+Each directory carries a README describing the contract it implements. The code there is original
+work for this fork and carries no source-available code or terms; the directory name is upstream's
+module path, nothing more.
+
+The point of reusing those paths is upgradability. Because the sync patch excludes
+`*/proprietary/*`, upstream changes never touch these files and these files never conflict with a
+patch, while every upstream file that imports them resolves without being edited. The diff against
+upstream outside those directories stays close to empty, which is what makes a sync a fast-forward
+rather than a merge exercise.
+
+Two upstream files are edited: `apps/dokploy/pages/index.tsx` and `apps/dokploy/pages/register.tsx`
+each drop a cloud-only condition so the Google and GitHub sign-in buttons render on a self-hosted
+panel. The buttons decide for themselves whether to appear, based on whether the provider is
+configured.
+
+After a sync, re-check that imports still resolve:
+
+```sh
+cd apps/dokploy && ./node_modules/.bin/tsc --noEmit
+cd packages/server && ./node_modules/.bin/tsc --noEmit
+```
+
+If a sync adds an import from a `proprietary` path that nothing here provides, add the symbol to the
+matching replacement module.
+
+## Panel sign-in
+
+Google and GitHub sign-in run on better-auth's own social providers, configured in the
+Apache-licensed `packages/server/src/lib/auth.ts`. Set the credentials as environment variables on
+the panel:
+
+```
+GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
+```
+
+The OAuth redirect URI is `https://<panel-domain>/api/auth/callback/google`. A button appears only
+when its provider's credentials are set.
+
+A Google identity links to an existing account with the same email address. Creating a new account
+through Google is still subject to the panel's own rule that, once an owner exists, only an invited
+user may register.
 
 ## Relationship to upstream
 

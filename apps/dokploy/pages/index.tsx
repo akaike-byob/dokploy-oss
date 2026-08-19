@@ -213,8 +213,8 @@ export default function Home({ IS_CLOUD, enforceSSO }: Props) {
 
 	const loginContent = (
 		<>
-			{IS_CLOUD && <SignInWithGithub />}
-			{IS_CLOUD && <SignInWithGoogle />}
+			<SignInWithGithub />
+			<SignInWithGoogle />
 			<Form {...loginForm}>
 				<form
 					method="post"

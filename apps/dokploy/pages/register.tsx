@@ -159,12 +159,10 @@ const Register = ({ isCloud }: Props) => {
 							</AlertBlock>
 						)}
 						<CardContent className="p-0">
-							{isCloud && (
-								<div className="flex flex-col gap-2">
-									<SignInWithGithub />
-									<SignInWithGoogle />
-								</div>
-							)}
+							<div className="flex flex-col gap-2">
+								<SignInWithGithub />
+								<SignInWithGoogle />
+							</div>
 							{isCloud && (
 								<p className="mb-4 text-center text-xs text-muted-foreground">
 									Or register with email
