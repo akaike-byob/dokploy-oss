@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type React from "react";
+import { PANEL_REPO_URL } from "@/lib/panel-repo";
 import { cn } from "@/lib/utils";
 import { useWhitelabelingPublic } from "@/utils/hooks/use-whitelabeling";
 import { GithubIcon } from "../icons/data-tools-icons";
@@ -41,7 +42,7 @@ export const OnboardingLayout = ({ children }: Props) => {
 				</div>
 				<div className="mx-auto flex w-full max-w-lg items-center justify-center gap-1 pb-6 text-muted-foreground sm:justify-end">
 					<Button variant="ghost" size="icon">
-						<Link href="https://github.com/dokploy/dokploy">
+						<Link href={PANEL_REPO_URL}>
 							<GithubIcon />
 						</Link>
 					</Button>
