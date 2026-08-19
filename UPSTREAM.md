@@ -108,6 +108,10 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   defaults it to true and then refuses to link a social identity to an existing account whose email
   is unverified. A self-hosted panel disables email verification, so every local account stays
   unverified and every first Google or SSO sign-in would fail with "account not linked".
+  It also grants the registered SSO issuers' origins on `/sso` paths, from
+  `lib/sso-trusted-origins.ts`. The SSO plugin will not fetch a discovery document from an origin
+  missing from `trustedOrigins`, and Dokploy keeps that list on the owner's user row with no UI to
+  edit it, so no external identity provider could otherwise be registered at all.
 - `LICENSE.MD`, and `NOTICE` - carry the full Apache-2.0 text and the statement of changes that
   Apache-2.0 section 4 requires of a public distribution. `LICENSE_PROPRIETARY.md` is absent, since
   no code it applies to is present.
