@@ -45,12 +45,16 @@ Sync by applying a filtered patch instead:
 
 ```sh
 # BASE is the commit recorded above; NEW is the upstream commit to move to.
-git diff <BASE>..<NEW> -- . ':(exclude)*/proprietary/*' > /tmp/upstream.patch
+git fetch upstream canary
+git diff --binary <BASE>..upstream/canary -- . ':(exclude)*/proprietary/*' > /tmp/upstream.patch
 git apply --3way /tmp/upstream.patch
 ```
 
-Resolve conflicts, then update the base commit recorded at the top of this file so the next sync
-diffs from the right place.
+`--binary` is required: the tree contains files git treats as binary, and without it the patch is
+rejected as a whole, since `git apply` is atomic.
+
+Do the sync on a scratch branch first, confirm both typechecks pass, then update the base commit
+recorded at the top of this file so the next sync diffs from the right place.
 
 ## Push hygiene
 
