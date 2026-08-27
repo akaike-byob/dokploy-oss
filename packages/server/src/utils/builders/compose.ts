@@ -7,15 +7,18 @@ import { writeDomainsToCompose } from "../docker/domain";
 import {
 	encodeBase64,
 	getEnvironmentVariablesObject,
+	prepareEnvironmentVariables,
 	prepareEnvironmentVariablesForFile,
 } from "../docker/utils";
+import { withResolvedVaultRefs } from "../vault";
 
 export type ComposeNested = InferResultType<
 	"compose",
 	{ environment: { with: { project: true } }; mounts: true; domains: true }
 >;
 
-export const getBuildComposeCommand = async (compose: ComposeNested) => {
+export const getBuildComposeCommand = async (rawCompose: ComposeNested) => {
+	const compose = await withResolvedVaultRefs(rawCompose);
 	const { COMPOSE_PATH } = paths(!!compose.serverId);
 	const { sourceType, appName, mounts, composeType, domains } = compose;
 	const command = createCommand(compose);
@@ -155,10 +158,18 @@ export const getCreateEnvFileCommand = (compose: ComposeNested) => {
 		envContent += `\nCOMPOSE_PREFIX=${compose.suffix}`;
 	}
 
-	const envFileContent = prepareEnvironmentVariablesForFile(
-		envContent,
-		compose.environment.project.env,
-		compose.environment.env,
+	const envFileContent = (
+		compose.composeType === "stack"
+			? prepareEnvironmentVariables(
+					envContent,
+					compose.environment.project.env,
+					compose.environment.env,
+				)
+			: prepareEnvironmentVariablesForFile(
+					envContent,
+					compose.environment.project.env,
+					compose.environment.env,
+				)
 	).join("\n");
 
 	const encodedContent = encodeBase64(envFileContent);

@@ -1,5 +1,5 @@
 {
-  "id": "008eb762-b4d7-4294-abae-27cff675b9d2",
+  "id": "7ec5fb3d-d514-4e7c-be26-3ea4c58bbce1",
   "prevId": "6ca6441e-7818-4252-a702-4b24fc80a239",
   "version": "7",
   "dialect": "postgresql",
@@ -7750,52 +7750,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.socialAuthProvider": {
-      "name": "socialAuthProvider",
-      "schema": "",
-      "columns": {
-        "providerId": {
-          "name": "providerId",
-          "type": "socialAuthProviderId",
-          "typeSchema": "public",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "clientId": {
-          "name": "clientId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "clientSecret": {
-          "name": "clientSecret",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.ssh-key": {
       "name": "ssh-key",
       "schema": "",
@@ -8306,6 +8260,99 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.vault_provider": {
+      "name": "vault_provider",
+      "schema": "",
+      "columns": {
+        "vaultProviderId": {
+          "name": "vaultProviderId",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "providerType": {
+          "name": "providerType",
+          "type": "VaultProviderType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assignments": {
+          "name": "assignments",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "organizationId": {
+          "name": "organizationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "vault_provider_org_name_idx": {
+          "name": "vault_provider_org_name_idx",
+          "columns": [
+            {
+              "expression": "organizationId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "vault_provider_organizationId_organization_id_fk": {
+          "name": "vault_provider_organizationId_organization_id_fk",
+          "tableFrom": "vault_provider",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organizationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -8959,12 +9006,15 @@
         "tag"
       ]
     },
-    "public.socialAuthProviderId": {
-      "name": "socialAuthProviderId",
+    "public.VaultProviderType": {
+      "name": "VaultProviderType",
       "schema": "public",
       "values": [
-        "google",
-        "github"
+        "hashicorp",
+        "infisical",
+        "aws",
+        "doppler",
+        "azure"
       ]
     }
   },

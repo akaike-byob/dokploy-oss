@@ -1,9 +1,9 @@
 # Upstream tracking
 
-This fork starts from Dokploy `canary` at:
+This fork tracks Dokploy `main`, the branch carrying the released version tags. It is level with:
 
 ```
-ef0272a4ecd886a7e62cd3b65dd22a010cd36b62
+903789bfe557e32d535fa10aafef292ba68a9ec4   # v0.30.2
 ```
 
 ## Why the history starts fresh
@@ -30,7 +30,7 @@ Add the remote once:
 
 ```sh
 git remote add upstream https://github.com/Dokploy/dokploy.git
-git fetch upstream canary
+git fetch upstream main
 ```
 
 **Never merge upstream into a published branch, and never rebase one onto upstream.** Git uploads
@@ -45,8 +45,8 @@ Sync by applying a filtered patch instead:
 
 ```sh
 # BASE is the commit recorded above; NEW is the upstream commit to move to.
-git fetch upstream canary
-git diff --binary <BASE>..upstream/canary -- . ':(exclude)*/proprietary/*' > /tmp/upstream.patch
+git fetch upstream main
+git diff --binary <BASE>..upstream/main -- . ':(exclude)*/proprietary/*' > /tmp/upstream.patch
 git apply --3way /tmp/upstream.patch
 ```
 
@@ -132,10 +132,21 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
   as it compiles, so it cannot be changed on a running container.
 - `apps/dokploy/drizzle/` and its `meta/_journal.json` - carry one migration of this fork's own,
-  for the `socialAuthProvider` table. Upstream numbers its migrations sequentially, so a sync brings
-  files whose numbers collide with it. The filenames differ by their generated slug and coexist;
-  only the journal conflicts, and it is resolved by keeping both entries. Application order follows
-  each entry's `when` timestamp, not its index, so leave those untouched.
+  `0186_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
+  migrations sequentially, so a sync brings files that collide with it. Two things need doing.
+
+  Renumber this fork's migration to sit after the last one the sync brought, renaming both
+  `<tag>.sql` and `meta/<idx>_snapshot.json`, and rebuild that snapshot as upstream's newest
+  snapshot plus this fork's table, with `prevId` set to the id of the snapshot before it. The
+  numbers cannot simply coexist: `meta/0181_snapshot.json` is one filename whoever wrote it.
+
+  Then raise the `when` of every migration the sync brought to just above this fork's. Drizzle
+  applies a migration only when `folderMillis` exceeds the single newest `created_at` in
+  `drizzle.__drizzle_migrations`, ignoring the tag and the index. This fork's migration was
+  generated later than upstream's, so on a panel that already ran it every migration the sync
+  brings has an older timestamp and is skipped in silence, leaving the code expecting columns the
+  database never got. Keep the entries in ascending `when` order, and never lower a timestamp that
+  a released image already applied.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
   to Docker Hub; `pull-request.yml` is upstream's, unchanged.

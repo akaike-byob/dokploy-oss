@@ -18,6 +18,7 @@ import {
 	getUserByToken,
 } from "../services/admin";
 import { createAuditLog } from "../services/proprietary/audit-log";
+import { resolveOrganizationDefaultRole } from "../services/proprietary/license-key";
 import { storedSocialCredentials } from "../services/social-auth";
 import {
 	getWebServerSettings,
@@ -85,6 +86,9 @@ const createBetterAuth = () =>
 			...(!IS_CLOUD ? ["/verify-email"] : []),
 		],
 		secret: betterAuthSecret,
+		onAPIError: {
+			errorURL: "/",
+		},
 		...(!IS_CLOUD
 			? {
 					advanced: {
@@ -207,6 +211,9 @@ const createBetterAuth = () =>
 			user: {
 				create: {
 					before: async (_user, context) => {
+						if (context?.path.includes("/scim")) {
+							return { data: { emailVerified: true } };
+						}
 						if (!IS_CLOUD) {
 							const xDokployToken =
 								context?.request?.headers?.get("x-dokploy-token");
@@ -239,8 +246,7 @@ const createBetterAuth = () =>
 								}
 							} else {
 								const isSSORequest = context?.path.includes("/sso");
-								const isSCIMRequest = context?.path.includes("/scim");
-								if (isSSORequest || isSCIMRequest) {
+								if (isSSORequest) {
 									return;
 								}
 								const isAdminPresent = await db.query.member.findFirst({
@@ -293,6 +299,20 @@ const createBetterAuth = () =>
 						}
 
 						if (isSCIMRequest) {
+							const membership = await db.query.member.findFirst({
+								where: eq(schema.member.userId, user.id),
+							});
+							if (membership) {
+								const defaultRole = await resolveOrganizationDefaultRole(
+									membership.organizationId,
+								);
+								if (defaultRole !== membership.role) {
+									await db
+										.update(schema.member)
+										.set({ role: defaultRole })
+										.where(eq(schema.member.id, membership.id));
+								}
+							}
 							return;
 						}
 
@@ -332,10 +352,13 @@ const createBetterAuth = () =>
 									message: "Provider not found",
 								});
 							}
+							const defaultRole = provider.organizationId
+								? await resolveOrganizationDefaultRole(provider.organizationId)
+								: "member";
 							await db.insert(schema.member).values({
 								userId: user.id,
 								organizationId: provider?.organizationId || "",
-								role: "member",
+								role: defaultRole,
 								createdAt: new Date(),
 								isDefault: true,
 							});

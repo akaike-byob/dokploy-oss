@@ -50,3 +50,4 @@ yarn-error.log*
 # Editor settings are per-developer: the repo carried one checkout's window colours,
 # and any local tweak showed up as a permanent dirty file.
 .vscode/settings.json
+scratch/

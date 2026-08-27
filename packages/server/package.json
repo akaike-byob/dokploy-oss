@@ -1,21 +1,32 @@
 {
   "name": "@dokploy/server",
   "version": "1.0.0",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs.js"
+    },
     "./db": {
-      "import": "./src/db/index.ts",
+      "import": "./dist/db/index.js",
       "require": "./dist/db/index.cjs.js"
     },
-    "./setup/*": {
-      "import": "./src/setup/*.ts",
-      "require": "./dist/setup/index.cjs.js"
+    "./*": {
+      "import": "./dist/*",
+      "require": "./dist/*.cjs"
     },
-    "./constants": {
-      "import": "./src/constants/index.ts",
-      "require": "./dist/constants.cjs.js"
+    "./dist": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs.js"
+    },
+    "./dist/db": {
+      "import": "./dist/db/index.js",
+      "require": "./dist/db/index.cjs.js"
+    },
+    "./dist/db/schema": {
+      "import": "./dist/db/schema/index.js",
+      "require": "./dist/db/schema/index.cjs.js"
     }
   },
   "scripts": {
@@ -37,6 +48,8 @@
     "@ai-sdk/mistral": "^3.0.20",
     "@ai-sdk/openai": "^3.0.29",
     "@ai-sdk/openai-compatible": "^2.0.30",
+    "@aws-sdk/client-route-53": "^3.1108.0",
+    "@aws-sdk/client-secrets-manager": "^3.1108.0",
     "@better-auth/api-key": "1.6.23",
     "@better-auth/passkey": "1.6.23",
     "@better-auth/scim": "1.6.23",
@@ -111,7 +124,7 @@
     "tailwindcss": "^3.4.17",
     "tsc-alias": "1.8.10",
     "tsx": "^4.22.4",
-    "typescript": "^5.8.3"
+    "typescript": "^7.0.2"
   },
   "packageManager": "pnpm@10.22.0",
   "engines": {
