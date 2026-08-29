@@ -5,6 +5,12 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 RUN corepack prepare pnpm@10.22.0 --activate
 
+# corepack unpacks pnpm's bundled node-gyp without the executable bit, and the Makefile node-gyp
+# generates runs gyp_main.py as a program. Only arm64 reaches that path: node-pty ships an x64
+# prebuild and never compiles there, while on arm64 it builds from source and the install dies
+# with "gyp_main.py: Permission denied".
+RUN find /root/.cache/node/corepack -name gyp_main.py -exec chmod +x {} +
+
 FROM base AS build
 WORKDIR /usr/src/app
 
