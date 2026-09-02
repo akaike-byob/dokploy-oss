@@ -56,6 +56,51 @@ rejected as a whole, since `git apply` is atomic.
 Do the sync on a scratch branch first, confirm both typechecks pass, then update the base commit
 recorded at the top of this file so the next sync diffs from the right place.
 
+## Reviewing what a sync brings
+
+A sync is a review, not a transfer. Upstream merges pull requests from first-time contributors on
+an AI reviewer's approval, sometimes over a failing test job, and tags a release the same day. A
+patch that applies without a conflict says only that the text lines up, and a defect that reaches
+a release reaches this fork's users through the image published from `main`.
+
+Read the change before taking it:
+
+```sh
+git log --oneline --no-merges <BASE>..<NEW>          # every subject
+git log --merges <BASE>..<NEW>                       # the pull requests behind them
+git diff <BASE>..<NEW> -- <path>                     # anything a subject makes you doubt
+```
+
+What each pass is looking for:
+
+- **Behaviour that changes for data already in the database.** A new default, a widened enum, a
+  column whose absence used to mean one thing, a permission that gates what was ungated. Ask what
+  an existing row does under the new code, not what a fresh install does. This is the failure the
+  `dockerContextPath` entry below records, and reading the diff is what found it.
+- **The pull request behind a suspicious commit.** `gh api repos/Dokploy/dokploy/pulls/<n>` gives
+  the description and the discussion; `gh api repos/Dokploy/dokploy/commits/<sha>/check-runs` gives
+  what CI said about the commit that was merged. A red `pr-check (test)`, no linked issue and no
+  maintainer comment together mean nobody upstream has checked the change either.
+- **New imports from a `proprietary` path**, which the replacement modules have to answer.
+- **Anything reaching the network from a self-hosted panel.** Upstream builds for its cloud too.
+  Analytics, billing and onboarding belong behind `settings.isCloud`; confirm each one is.
+
+Then run the full suite, not the typechecks alone:
+
+```sh
+cd packages/server && pnpm build
+cd ../../apps/dokploy && pnpm test --run
+```
+
+Root-cause every red test. "The real Docker tests are flaky on a laptop" is a guess until it is
+checked, and the way to check is to run the same file on `main` before the sync: if it passes there
+and fails here, the sync brought a defect, whatever the failure looks like. The suite also runs real
+builds against a network, so a genuine environment failure looks like a timeout or a clone error,
+and it clears on a second run of that file alone. A failure that reproduces is upstream's code.
+
+Take a change only once you can say what it does. Anything left over goes in the divergence list
+below with the reason and the condition for dropping it.
+
 ## Push hygiene
 
 This clone keeps upstream's objects locally so patches can be generated. Only `main` is safe to
