@@ -112,6 +112,7 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 
 	const {
 		data: validation,
+		isSuccess: isValidated,
 		refetch: refetchValidation,
 		isFetching: isValidating,
 	} = api.server.validate.useQuery(
@@ -127,12 +128,20 @@ export const ServerStep = ({ onNext, plainTitle }: Props) => {
 	const [isSettingUp, setIsSettingUp] = useState(false);
 	const hasStartedSetup = useRef(false);
 
+	// `isReady` reads false until the first validation answers, and the step adopts a server the
+	// user already had. Starting on that would re-run the provisioning script (Docker, swarm,
+	// network) against a live host that needs nothing.
 	useEffect(() => {
-		if (createdServerId && !hasStartedSetup.current && !isReady) {
+		if (
+			createdServerId &&
+			isValidated &&
+			!hasStartedSetup.current &&
+			!isReady
+		) {
 			hasStartedSetup.current = true;
 			setIsSettingUp(true);
 		}
-	}, [createdServerId, isReady]);
+	}, [createdServerId, isValidated, isReady]);
 
 	useEffect(() => {
 		if (!isSettingUp) return;

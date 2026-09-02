@@ -161,7 +161,11 @@ export const applicationRouter = createTRPCRouter({
 				});
 			}
 
-			if (IS_CLOUD && !input.serverId) {
+			const webServerSettings = await getWebServerSettings();
+			if (
+				(IS_CLOUD || webServerSettings?.remoteServersOnly) &&
+				!input.serverId
+			) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: "You need to use a server to create an application",

@@ -46,6 +46,7 @@ export const DeleteServerModal = ({
 	const {
 		data: services,
 		isLoading,
+		isError,
 		refetch,
 	} = api.server.getServices.useQuery({ serverId }, { enabled: open });
 
@@ -61,7 +62,9 @@ export const DeleteServerModal = ({
 	const { mutateAsync: deleteServer, isPending: isDeletingServer } =
 		api.server.remove.useMutation();
 
-	const canDelete = (services?.length ?? 0) === 0;
+	// An unanswered or failed query says nothing about what the server hosts, and this button
+	// deletes it. Only an empty list that actually came back permits the delete.
+	const canDelete = !isLoading && !isError && (services?.length ?? 0) === 0;
 
 	const handleDeleteService = async (
 		service: NonNullable<typeof services>[number],
@@ -133,6 +136,11 @@ export const DeleteServerModal = ({
 					<div className="flex justify-center py-6">
 						<Loader2 className="size-5 animate-spin text-muted-foreground" />
 					</div>
+				) : isError ? (
+					<AlertBlock type="error">
+						Could not read what this server hosts, so it cannot be deleted from
+						here. Try again once the server answers.
+					</AlertBlock>
 				) : canDelete ? (
 					<AlertBlock type="info">
 						No services are associated with this server. You can delete it

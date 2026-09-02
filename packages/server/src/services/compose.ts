@@ -289,7 +289,10 @@ export const deployCompose = async ({
 		}
 
 		if (freshVolumes && compose.composeType === "docker-compose") {
-			const downCommand = `set -e; env -i PATH="$PATH" docker compose -p ${compose.appName} down --volumes 2>&1 || true;`;
+			// HOME is needed for ~/.docker/config.json (contexts, registry auth). A failure here must
+			// not abort the deploy, but it must be visible: otherwise the stack comes back up on the
+			// volumes the user was told had been removed.
+			const downCommand = `set -e; env -i PATH="$PATH" HOME="$HOME" docker compose -p ${quote([compose.appName])} down --volumes 2>&1 || echo "Warning: ⚠️ could not remove the volumes, deploying onto the existing ones";`;
 			const downWithLog = `(${downCommand}) >> ${deployment.logPath} 2>&1`;
 			if (compose.serverId) {
 				await execAsyncRemote(compose.serverId, downWithLog);
@@ -345,7 +348,7 @@ export const deployCompose = async ({
 			projectName: compose.environment.project.name,
 			applicationName: compose.name,
 			applicationType: "compose",
-			// @ts-ignore
+			// @ts-expect-error
 			errorMessage: error?.message || "Error building",
 			buildLink,
 			organizationId: compose.environment.project.organizationId,
@@ -415,7 +418,10 @@ export const rebuildCompose = async ({
 		}
 
 		if (freshVolumes && compose.composeType === "docker-compose") {
-			const downCommand = `set -e; env -i PATH="$PATH" docker compose -p ${compose.appName} down --volumes 2>&1 || true;`;
+			// HOME is needed for ~/.docker/config.json (contexts, registry auth). A failure here must
+			// not abort the deploy, but it must be visible: otherwise the stack comes back up on the
+			// volumes the user was told had been removed.
+			const downCommand = `set -e; env -i PATH="$PATH" HOME="$HOME" docker compose -p ${quote([compose.appName])} down --volumes 2>&1 || echo "Warning: ⚠️ could not remove the volumes, deploying onto the existing ones";`;
 			const downWithLog = `(${downCommand}) >> ${deployment.logPath} 2>&1`;
 			if (compose.serverId) {
 				await execAsyncRemote(compose.serverId, downWithLog);

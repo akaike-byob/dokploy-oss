@@ -1,6 +1,11 @@
 import { findUserById, updateUser } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
-import { member, projects, server, user } from "@dokploy/server/db/schema";
+import {
+	organization,
+	projects,
+	server,
+	user,
+} from "@dokploy/server/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -50,6 +55,15 @@ const cancelActiveSubscriptions = async (stripeCustomerId: string) => {
 };
 
 (async () => {
+	// The script deletes rows, and `-r dotenv/config` means it points at whatever DATABASE_URL the
+	// checkout is configured with, which is often a shared database.
+	if (process.env.NODE_ENV === "production") {
+		console.log(
+			"Refusing to run with NODE_ENV=production. This deletes projects and servers.",
+		);
+		process.exit(1);
+	}
+
 	const email = process.argv[2]?.trim().toLowerCase();
 	if (!email) {
 		console.log("Usage: pnpm reset-onboarding <email>");
@@ -73,14 +87,16 @@ const cancelActiveSubscriptions = async (stripeCustomerId: string) => {
 		await cancelActiveSubscriptions(foundUser.stripeCustomerId);
 	}
 
-	const memberships = await db.query.member.findMany({
-		where: eq(member.userId, foundUser.id),
+	// Only the organizations this user owns. A membership in someone else's organization would put
+	// that whole organization's projects and servers in the blast radius.
+	const ownedOrganizations = await db.query.organization.findMany({
+		where: eq(organization.ownerId, foundUser.id),
 	});
 
-	for (const membership of memberships) {
+	for (const ownedOrganization of ownedOrganizations) {
 		const deletedProjects = await db
 			.delete(projects)
-			.where(eq(projects.organizationId, membership.organizationId))
+			.where(eq(projects.organizationId, ownedOrganization.id))
 			.returning({ id: projects.projectId, name: projects.name });
 		for (const project of deletedProjects) {
 			console.log(`  - deleted project "${project.name}" (${project.id})`);
@@ -88,7 +104,7 @@ const cancelActiveSubscriptions = async (stripeCustomerId: string) => {
 
 		const deletedServers = await db
 			.delete(server)
-			.where(eq(server.organizationId, membership.organizationId))
+			.where(eq(server.organizationId, ownedOrganization.id))
 			.returning({ id: server.serverId, name: server.name });
 		for (const deletedServer of deletedServers) {
 			console.log(

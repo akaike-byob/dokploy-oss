@@ -36,6 +36,21 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 		return;
 	}
 
+	// Next's body parser is off, so trpc-openapi reads the body itself and picks a parser by
+	// comparing the whole Content-Type header against "application/json". Clients that send
+	// "application/json; charset=utf-8" would fall through it and arrive with an empty input, so
+	// the media type is separated from its parameters here. The parsers assume UTF-8 regardless.
+	const contentType = req.headers["content-type"];
+	if (contentType) {
+		const mediaType = contentType.split(";")[0]?.trim().toLowerCase();
+		if (
+			mediaType === "application/json" ||
+			mediaType === "application/x-www-form-urlencoded"
+		) {
+			req.headers["content-type"] = mediaType;
+		}
+	}
+
 	// @ts-ignore
 	return createOpenApiNextHandler({
 		router: appRouter,

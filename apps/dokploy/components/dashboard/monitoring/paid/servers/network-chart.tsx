@@ -20,7 +20,9 @@ interface NetworkChartProps {
 }
 
 function formatNetworkGB(valueInMB: number) {
-	if (Number.isNaN(valueInMB)) return "0";
+	// The series is empty until the agent reports, so the value is usually undefined rather than
+	// NaN, and Number.isNaN(undefined) is false.
+	if (!Number.isFinite(valueInMB)) return "0";
 	return (valueInMB / 1024).toFixed(1);
 }
 

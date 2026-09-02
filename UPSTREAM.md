@@ -222,8 +222,70 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
   which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to
   Docker Hub; `pull-request.yml` is upstream's, unchanged.
+- `apps/dokploy/pages/_error.tsx`, `apps/dokploy/components/layouts/onboarding-layout.tsx`,
+  `apps/dokploy/components/dashboard/settings/web-server/update-server.tsx`,
+  `apps/dokploy/server/api/routers/notification.ts` and the seven templates in
+  `packages/server/src/emails/emails/` - point their repository, releases, issues and logo links at
+  this fork, from `apps/dokploy/lib/panel-repo.ts` and `services/panel-build.ts`. Upstream's links
+  describe a build the operator is not running. New upstream screens arrive with the hardcoded
+  Dokploy links; check for them after a sync.
+- `apps/dokploy/pages/dashboard/settings/sso.tsx` - drops upstream's `GoogleAuthSettings` card. The
+  Google form lives in this fork's own SSO settings instead, since upstream's is source-available.
+- `packages/server/src/index.ts`, `packages/server/src/db/schema/index.ts` - export this fork's own
+  modules (`services/panel-build.ts`, `lib/social-auth-providers.ts`, `lib/sso-trusted-origins.ts`,
+  `db/schema/social-auth.ts`) alongside upstream's.
+- `packages/server/package.json` - committed with the `src` exports that `switch:dev` writes, so a
+  fresh clone typechecks without building first. `pnpm build` rewrites it to `dist` and back.
+- `README.md` and `install.sh` - describe and install this fork's image rather than upstream's.
+  Upstream's installer is a separate repository; this one is the fork's own.
+- `.env.production` - tracked here with `PORT` and `NODE_ENV`, because `Dockerfile` copies it into
+  the image as `.env`. CI overwrites it from `.env.production.example` before the build.
+- `.gitignore` and `.vscode/settings.json` - editor settings are per-developer, so the tracked file
+  is gone and the path is ignored, along with `scratch/`.
+
+This fork also carries fixes for defects it found in upstream's code while reviewing a sync. Each
+one is upstream's file, so a later sync brings upstream's version back the moment upstream fixes it
+itself, which is the point at which the fix here should go:
+
+- `packages/server/src/services/mount.ts` - a file mount's `filePath` is a free-form string, and
+  the write, the `rm -rf` that clears a directory in its place and the delete all run as root on
+  the target host. A path resolving outside the mount's own directory is rejected, so `../code`
+  cannot delete a service's cloned sources.
+- `packages/server/src/utils/dns/route53.ts` - a CNAME is replaced rather than merged into the
+  existing record set. Route53 rejects a CNAME set holding more than one value, so merging made
+  every repoint of an existing CNAME fail.
+- `apps/dokploy/pages/api/[...trpc].ts` - the Content-Type is reduced to its media type before
+  trpc-openapi compares it, which it does against the whole header. A client sending
+  `application/json; charset=utf-8` otherwise arrives with an empty body and fails validation on
+  every field.
+- `packages/server/src/services/compose.ts` - the "fresh volumes" teardown runs with `HOME` set so
+  the docker CLI can read its config, and a failure is logged instead of swallowed by `|| true`.
+  Swallowing it deployed onto the old volumes and reported success, so a database the operator
+  believed was reset still held its data.
+- `apps/dokploy/server/api/routers/application.ts` - the nginx quickstart honours
+  `remoteServersOnly`, so it cannot schedule onto a control plane the operator kept empty.
+- `apps/dokploy/scripts/reset-onboarding.ts` - refuses to run under `NODE_ENV=production` and
+  deletes only within organizations the named user owns. It deleted every project and server of
+  every organization they merely belonged to, unprompted.
+- `apps/dokploy/components/dashboard/onboarding/` - `isCloud` defaults to false while the query is
+  in flight, the wizard's lock lives in `sessionStorage` so an
+  abandoned run dies with the tab rather than following the browser's next user, the plan step is
+  loaded dynamically so `@stripe/stripe-js` stays out of a self-hosted bundle, and the server step
+  waits for validation to succeed before provisioning a host that already exists.
+- `apps/dokploy/components/dashboard/settings/servers/delete-server-modal.tsx` - the delete button
+  waits for the service list to arrive, rather than reading a loading or failed query as "no
+  services will be affected".
+- `apps/dokploy/components/dashboard/monitoring/paid/servers/network-chart.tsx` - an absent value
+  formats as `0`. The guard tested `Number.isNaN`, which is false for `undefined`.
 
 Take upstream's changes to any of these deliberately rather than by default.
+
+The two lists above are the whole set. `git diff HEAD <NEW> -- . ':(exclude)*/proprietary/*' --name-only`
+after a sync prints these files, together with the ones this fork adds rather than edits: the
+replacement modules named above, `UPSTREAM.md`, `NOTICE`, its migration under
+`apps/dokploy/drizzle/`, and its own tests under `apps/dokploy/__test__/`. Anything else it names is
+a hunk the sync dropped or an undocumented divergence, and one of the two has to be fixed before the
+sync is done.
 
 After a sync, re-check that imports still resolve:
 

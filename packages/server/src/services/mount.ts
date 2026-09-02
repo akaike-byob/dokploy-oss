@@ -23,6 +23,25 @@ import type { z } from "zod";
 
 export type Mount = typeof mounts.$inferSelect;
 
+/**
+ * `filePath` is stored as a free-form string, so it can contain `..`. The write, the `rm -rf` that
+ * clears a directory in its place and the delete all run as root on the target host, so a path
+ * that escapes the mount's own directory would reach the cloned sources or the Traefik config.
+ */
+const resolveMountFilePath = (basePath: string, filePath: string) => {
+	const fullPath = path.resolve(basePath, filePath);
+	if (
+		fullPath !== path.resolve(basePath) &&
+		!fullPath.startsWith(`${path.resolve(basePath)}${path.sep}`)
+	) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `The file path has to stay inside the mount directory: ${filePath}`,
+		});
+	}
+	return fullPath;
+};
+
 export const createMount = async (input: z.infer<typeof apiCreateMount>) => {
 	try {
 		const { serviceId, ...rest } = input;
@@ -83,6 +102,7 @@ export const createFileMount = async (mountId: string) => {
 	try {
 		const mount = await findMountById(mountId);
 		const baseFilePath = await getBaseFilesPath(mountId);
+		resolveMountFilePath(baseFilePath, mount.filePath || "");
 
 		const serverId = await getServerId(mount);
 
@@ -261,7 +281,7 @@ export const updateFileMount = async (mountId: string) => {
 	const mount = await findMountById(mountId);
 	if (!mount || !mount.filePath) return;
 	const basePath = await getBaseFilesPath(mountId);
-	const fullPath = path.join(basePath, mount.filePath);
+	const fullPath = resolveMountFilePath(basePath, mount.filePath);
 	const directory = path.dirname(fullPath);
 
 	try {
@@ -292,7 +312,7 @@ export const deleteFileMount = async (mountId: string) => {
 	if (!mount.filePath) return;
 	const basePath = await getBaseFilesPath(mountId);
 
-	const fullPath = path.join(basePath, mount.filePath);
+	const fullPath = resolveMountFilePath(basePath, mount.filePath);
 	try {
 		const serverId = await getServerId(mount);
 		if (serverId) {

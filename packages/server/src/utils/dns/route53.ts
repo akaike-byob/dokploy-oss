@@ -155,7 +155,9 @@ export const route53Client: DnsClient<Route53Config> = {
 			record.name,
 		);
 		const recordSet = buildRecordSet(record);
-		if (existing?.ResourceRecords?.length) {
+		// Route53 rejects a CNAME record set holding more than one value, so pointing an existing
+		// CNAME somewhere new has to replace it rather than merge into it.
+		if (record.type !== "CNAME" && existing?.ResourceRecords?.length) {
 			const values = new Set([
 				...existing.ResourceRecords.map((r) => r.Value),
 				...(recordSet.ResourceRecords ?? []).map((r) => r.Value),

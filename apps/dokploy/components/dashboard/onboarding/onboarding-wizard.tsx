@@ -1,5 +1,6 @@
 import { defineStepper } from "@stepperize/react";
 import { CheckIcon } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
@@ -18,10 +19,17 @@ import { api } from "@/utils/api";
 import { getOnboardingState, setOnboardingState } from "./onboarding-lock";
 import { CompleteStep } from "./steps/complete-step";
 import { DeployStep } from "./steps/deploy-step";
-import { PlanStep } from "./steps/plan-step";
 import { ProjectStep } from "./steps/project-step";
 import { ServerStep } from "./steps/server-step";
 import { WelcomeStep } from "./steps/welcome-step";
+
+// Importing @stripe/stripe-js injects https://js.stripe.com/v3 into the page on the next tick,
+// whether or not a checkout is ever started. The wizard is mounted from /dashboard/home, so a
+// static import would put that request on the first screen of every self-hosted panel.
+const PlanStep = dynamic(
+	() => import("./steps/plan-step").then((mod) => mod.PlanStep),
+	{ ssr: false },
+);
 
 const { useStepper, steps, Scoped } = defineStepper(
 	{ id: "welcome", title: "Welcome" },
@@ -53,7 +61,9 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 		persisted.environmentId,
 	);
 
-	const { data: isCloud = true } = api.settings.isCloud.useQuery();
+	// Until the query answers, treat the panel as self-hosted: showing the plan and server steps to
+	// someone who has no billing is worse than briefly hiding them from someone who does.
+	const { data: isCloud = false } = api.settings.isCloud.useQuery();
 	const visibleStepIds = isCloud
 		? steps.map((step) => step.id)
 		: steps
@@ -65,6 +75,15 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 		const nextId = visibleStepIds[visibleIndex + 1];
 		if (nextId) stepper.goTo(nextId);
 	};
+
+	// A step id restored from localStorage, or left over from before the query answered, can name a
+	// step this panel does not show. It would otherwise keep rendering with no way forward, since
+	// every "next" resolves against the visible list and lands back at the first step.
+	useEffect(() => {
+		if (visibleIndex === -1 && visibleStepIds[0]) {
+			stepper.goTo(visibleStepIds[0]);
+		}
+	}, [visibleIndex, visibleStepIds[0]]);
 
 	const [skipAllOpen, setSkipAllOpen] = useState(false);
 	const handleSkipAll = async () => {
