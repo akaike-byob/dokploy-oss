@@ -148,6 +148,13 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   fork's entry a second time and applies every upstream one above it. If a sync ever brings a
   migration timestamped below it, raise that one to just above, and never lower a timestamp a
   released image already applied.
+- `packages/server/src/utils/filesystem/directory.ts`,
+  `packages/server/src/utils/builders/docker-file.ts`,
+  `apps/dokploy/components/dashboard/application/build/show.tsx` - an empty `dockerContextPath`
+  builds from the Dockerfile's own directory. Upstream made it the repository root instead, which
+  changes what `COPY` resolves against for every application configured before the field existed
+  and breaks their builds without a word; upstream's own `application.real.test.ts` fails on it.
+  The form's placeholder names the real default rather than `.`.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
   which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to
