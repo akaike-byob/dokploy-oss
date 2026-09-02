@@ -3,7 +3,7 @@
 This fork tracks Dokploy `main`, the branch carrying the released version tags. It is level with:
 
 ```
-903789bfe557e32d535fa10aafef292ba68a9ec4   # v0.30.2
+f67fab0675652f8a819e6962f1e510ea0e2ee53b   # v0.30.5
 ```
 
 ## Why the history starts fresh
@@ -132,7 +132,7 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
   as it compiles, so it cannot be changed on a running container.
 - `apps/dokploy/drizzle/` and its `meta/_journal.json` - carry one migration of this fork's own,
-  `0186_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
+  `0191_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
   migrations sequentially, so a sync brings files that collide with it. Two things need doing.
 
   Renumber this fork's migration to sit after the last one the sync brought, renaming both
@@ -140,16 +140,18 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   snapshot plus this fork's table, with `prevId` set to the id of the snapshot before it. The
   numbers cannot simply coexist: `meta/0181_snapshot.json` is one filename whoever wrote it.
 
-  Then raise the `when` of every migration the sync brought to just above this fork's. Drizzle
-  applies a migration only when `folderMillis` exceeds the single newest `created_at` in
-  `drizzle.__drizzle_migrations`, ignoring the tag and the index. This fork's migration was
-  generated later than upstream's, so on a panel that already ran it every migration the sync
-  brings has an older timestamp and is skipped in silence, leaving the code expecting columns the
-  database never got. Keep the entries in ascending `when` order, and never lower a timestamp that
-  a released image already applied.
+  Keep the `when` of this fork's migration exactly as generated, at 1787171678956, and check that
+  every migration the sync brought carries a later one. Drizzle applies a migration only when
+  `folderMillis` exceeds the single newest `created_at` in `drizzle.__drizzle_migrations`, read
+  once before the loop and never during it, so the index and the array order decide nothing. A
+  panel that already ran this fork's migration holds that timestamp as its newest, which skips the
+  fork's entry a second time and applies every upstream one above it. If a sync ever brings a
+  migration timestamped below it, raise that one to just above, and never lower a timestamp a
+  released image already applied.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
-  pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
-  to Docker Hub; `pull-request.yml` is upstream's, unchanged.
+  pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
+  which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to
+  Docker Hub; `pull-request.yml` is upstream's, unchanged.
 
 Take upstream's changes to any of these deliberately rather than by default.
 
