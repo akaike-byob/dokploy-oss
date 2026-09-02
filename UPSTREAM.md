@@ -151,10 +151,28 @@ Upstream files edited here, and therefore the only places a sync can conflict:
 - `packages/server/src/utils/filesystem/directory.ts`,
   `packages/server/src/utils/builders/docker-file.ts`,
   `apps/dokploy/components/dashboard/application/build/show.tsx` - an empty `dockerContextPath`
-  builds from the Dockerfile's own directory. Upstream made it the repository root instead, which
-  changes what `COPY` resolves against for every application configured before the field existed
-  and breaks their builds without a word; upstream's own `application.real.test.ts` fails on it.
-  The form's placeholder names the real default rather than `.`.
+  builds from the Dockerfile's own directory, and the form's placeholder says so rather than
+  claiming `.`.
+
+  Upstream made an empty value mean the repository root, in
+  [PR #5231](https://github.com/Dokploy/dokploy/pull/5231), merged into v0.30.5. Every application
+  configured before that field existed has an empty value, so the change moves what `COPY` resolves
+  against and the build fails on the first line naming a file beside the Dockerfile. The panel says
+  nothing; the deploy simply stops working.
+
+  This is a defect upstream has not yet noticed rather than a decision it made. The pull request
+  came from a first-time contributor who read the input's placeholder, `default: .`, and changed the
+  code to match the text instead of the text to match the code. It carries no linked issue and no
+  maintainer review. Its `pr-check (test)` job failed on the merged commit, because upstream's own
+  `application.real.test.ts` builds `deno/Dockerfile` from the examples repository and that build
+  needs the Dockerfile's directory as context; it was merged anyway, and v0.30.5 was tagged hours
+  later the same day. A second contributor has since reported on the pull request that `canary` is
+  red for everyone and asked for the fallback to be reverted.
+
+  Drop this divergence once upstream reverts, and check first that the revert is real rather than a
+  test loosened around the new behaviour. If upstream instead keeps the repository root on purpose,
+  taking it needs a migration that writes the Dockerfile's directory into `dockerContextPath` for
+  every application still holding an empty one, so no deploy changes meaning.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
   which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to
