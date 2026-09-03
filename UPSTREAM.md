@@ -3,7 +3,7 @@
 This fork tracks Dokploy `main`, the branch carrying the released version tags. It is level with:
 
 ```
-903789bfe557e32d535fa10aafef292ba68a9ec4   # v0.30.2
+f67fab0675652f8a819e6962f1e510ea0e2ee53b   # v0.30.5
 ```
 
 ## Why the history starts fresh
@@ -55,6 +55,51 @@ rejected as a whole, since `git apply` is atomic.
 
 Do the sync on a scratch branch first, confirm both typechecks pass, then update the base commit
 recorded at the top of this file so the next sync diffs from the right place.
+
+## Reviewing what a sync brings
+
+A sync is a review, not a transfer. Upstream merges pull requests from first-time contributors on
+an AI reviewer's approval, sometimes over a failing test job, and tags a release the same day. A
+patch that applies without a conflict says only that the text lines up, and a defect that reaches
+a release reaches this fork's users through the image published from `main`.
+
+Read the change before taking it:
+
+```sh
+git log --oneline --no-merges <BASE>..<NEW>          # every subject
+git log --merges <BASE>..<NEW>                       # the pull requests behind them
+git diff <BASE>..<NEW> -- <path>                     # anything a subject makes you doubt
+```
+
+What each pass is looking for:
+
+- **Behaviour that changes for data already in the database.** A new default, a widened enum, a
+  column whose absence used to mean one thing, a permission that gates what was ungated. Ask what
+  an existing row does under the new code, not what a fresh install does. This is the failure the
+  `dockerContextPath` entry below records, and reading the diff is what found it.
+- **The pull request behind a suspicious commit.** `gh api repos/Dokploy/dokploy/pulls/<n>` gives
+  the description and the discussion; `gh api repos/Dokploy/dokploy/commits/<sha>/check-runs` gives
+  what CI said about the commit that was merged. A red `pr-check (test)`, no linked issue and no
+  maintainer comment together mean nobody upstream has checked the change either.
+- **New imports from a `proprietary` path**, which the replacement modules have to answer.
+- **Anything reaching the network from a self-hosted panel.** Upstream builds for its cloud too.
+  Analytics, billing and onboarding belong behind `settings.isCloud`; confirm each one is.
+
+Then run the full suite, not the typechecks alone:
+
+```sh
+cd packages/server && pnpm build
+cd ../../apps/dokploy && pnpm test --run
+```
+
+Root-cause every red test. "The real Docker tests are flaky on a laptop" is a guess until it is
+checked, and the way to check is to run the same file on `main` before the sync: if it passes there
+and fails here, the sync brought a defect, whatever the failure looks like. The suite also runs real
+builds against a network, so a genuine environment failure looks like a timeout or a clone error,
+and it clears on a second run of that file alone. A failure that reproduces is upstream's code.
+
+Take a change only once you can say what it does. Anything left over goes in the divergence list
+below with the reason and the condition for dropping it.
 
 ## Push hygiene
 
@@ -132,7 +177,7 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
   as it compiles, so it cannot be changed on a running container.
 - `apps/dokploy/drizzle/` and its `meta/_journal.json` - carry one migration of this fork's own,
-  `0186_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
+  `0191_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
   migrations sequentially, so a sync brings files that collide with it. Two things need doing.
 
   Renumber this fork's migration to sit after the last one the sync brought, renaming both
@@ -140,18 +185,107 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   snapshot plus this fork's table, with `prevId` set to the id of the snapshot before it. The
   numbers cannot simply coexist: `meta/0181_snapshot.json` is one filename whoever wrote it.
 
-  Then raise the `when` of every migration the sync brought to just above this fork's. Drizzle
-  applies a migration only when `folderMillis` exceeds the single newest `created_at` in
-  `drizzle.__drizzle_migrations`, ignoring the tag and the index. This fork's migration was
-  generated later than upstream's, so on a panel that already ran it every migration the sync
-  brings has an older timestamp and is skipped in silence, leaving the code expecting columns the
-  database never got. Keep the entries in ascending `when` order, and never lower a timestamp that
-  a released image already applied.
+  Keep the `when` of this fork's migration exactly as generated, at 1787171678956, and check that
+  every migration the sync brought carries a later one. Drizzle applies a migration only when
+  `folderMillis` exceeds the single newest `created_at` in `drizzle.__drizzle_migrations`, read
+  once before the loop and never during it, so the index and the array order decide nothing. A
+  panel that already ran this fork's migration holds that timestamp as its newest, which skips the
+  fork's entry a second time and applies every upstream one above it. If a sync ever brings a
+  migration timestamped below it, raise that one to just above, and never lower a timestamp a
+  released image already applied.
+- `packages/server/src/utils/filesystem/directory.ts`,
+  `packages/server/src/utils/builders/docker-file.ts`,
+  `apps/dokploy/components/dashboard/application/build/show.tsx` - an empty `dockerContextPath`
+  builds from the Dockerfile's own directory, and the form's placeholder says so rather than
+  claiming `.`.
+
+  Upstream made an empty value mean the repository root, in
+  [PR #5231](https://github.com/Dokploy/dokploy/pull/5231), merged into v0.30.5. Every application
+  configured before that field existed has an empty value, so the change moves what `COPY` resolves
+  against and the build fails on the first line naming a file beside the Dockerfile. The panel says
+  nothing; the deploy simply stops working.
+
+  This is a defect upstream has not yet noticed rather than a decision it made. The pull request
+  came from a first-time contributor who read the input's placeholder, `default: .`, and changed the
+  code to match the text instead of the text to match the code. It carries no linked issue and no
+  maintainer review. Its `pr-check (test)` job failed on the merged commit, because upstream's own
+  `application.real.test.ts` builds `deno/Dockerfile` from the examples repository and that build
+  needs the Dockerfile's directory as context; it was merged anyway, and v0.30.5 was tagged hours
+  later the same day. A second contributor has since reported on the pull request that `canary` is
+  red for everyone and asked for the fallback to be reverted.
+
+  Drop this divergence once upstream reverts, and check first that the revert is real rather than a
+  test loosened around the new behaviour. If upstream instead keeps the repository root on purpose,
+  taking it needs a migration that writes the Dockerfile's directory into `dockerContextPath` for
+  every application still holding an empty one, so no deploy changes meaning.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
-  pushes to Dokploy's other repositories, so it is absent. `image.yml` publishes this fork's image
-  to Docker Hub; `pull-request.yml` is upstream's, unchanged.
+  pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
+  which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to
+  Docker Hub; `pull-request.yml` is upstream's, unchanged.
+- `apps/dokploy/pages/_error.tsx`, `apps/dokploy/components/layouts/onboarding-layout.tsx`,
+  `apps/dokploy/components/dashboard/settings/web-server/update-server.tsx`,
+  `apps/dokploy/server/api/routers/notification.ts` and the seven templates in
+  `packages/server/src/emails/emails/` - point their repository, releases, issues and logo links at
+  this fork, from `apps/dokploy/lib/panel-repo.ts` and `services/panel-build.ts`. Upstream's links
+  describe a build the operator is not running. New upstream screens arrive with the hardcoded
+  Dokploy links; check for them after a sync.
+- `apps/dokploy/pages/dashboard/settings/sso.tsx` - drops upstream's `GoogleAuthSettings` card. The
+  Google form lives in this fork's own SSO settings instead, since upstream's is source-available.
+- `packages/server/src/index.ts`, `packages/server/src/db/schema/index.ts` - export this fork's own
+  modules (`services/panel-build.ts`, `lib/social-auth-providers.ts`, `lib/sso-trusted-origins.ts`,
+  `db/schema/social-auth.ts`) alongside upstream's.
+- `packages/server/package.json` - committed with the `src` exports that `switch:dev` writes, so a
+  fresh clone typechecks without building first. `pnpm build` rewrites it to `dist` and back.
+- `README.md` and `install.sh` - describe and install this fork's image rather than upstream's.
+  Upstream's installer is a separate repository; this one is the fork's own.
+- `.env.production` - tracked here with `PORT` and `NODE_ENV`, because `Dockerfile` copies it into
+  the image as `.env`. CI overwrites it from `.env.production.example` before the build.
+- `.gitignore` and `.vscode/settings.json` - editor settings are per-developer, so the tracked file
+  is gone and the path is ignored, along with `scratch/`.
+
+This fork also carries fixes for defects it found in upstream's code while reviewing a sync. Each
+one is upstream's file, so a later sync brings upstream's version back the moment upstream fixes it
+itself, which is the point at which the fix here should go:
+
+- `packages/server/src/services/mount.ts` - a file mount's `filePath` is a free-form string, and
+  the write, the `rm -rf` that clears a directory in its place and the delete all run as root on
+  the target host. A path resolving outside the mount's own directory is rejected, so `../code`
+  cannot delete a service's cloned sources.
+- `packages/server/src/utils/dns/route53.ts` - a CNAME is replaced rather than merged into the
+  existing record set. Route53 rejects a CNAME set holding more than one value, so merging made
+  every repoint of an existing CNAME fail.
+- `apps/dokploy/pages/api/[...trpc].ts` - the Content-Type is reduced to its media type before
+  trpc-openapi compares it, which it does against the whole header. A client sending
+  `application/json; charset=utf-8` otherwise arrives with an empty body and fails validation on
+  every field.
+- `packages/server/src/services/compose.ts` - the "fresh volumes" teardown runs with `HOME` set so
+  the docker CLI can read its config, and a failure is logged instead of swallowed by `|| true`.
+  Swallowing it deployed onto the old volumes and reported success, so a database the operator
+  believed was reset still held its data.
+- `apps/dokploy/server/api/routers/application.ts` - the nginx quickstart honours
+  `remoteServersOnly`, so it cannot schedule onto a control plane the operator kept empty.
+- `apps/dokploy/scripts/reset-onboarding.ts` - refuses to run under `NODE_ENV=production` and
+  deletes only within organizations the named user owns. It deleted every project and server of
+  every organization they merely belonged to, unprompted.
+- `apps/dokploy/components/dashboard/onboarding/` - `isCloud` defaults to false while the query is
+  in flight, the wizard's lock lives in `sessionStorage` so an
+  abandoned run dies with the tab rather than following the browser's next user, the plan step is
+  loaded dynamically so `@stripe/stripe-js` stays out of a self-hosted bundle, and the server step
+  waits for validation to succeed before provisioning a host that already exists.
+- `apps/dokploy/components/dashboard/settings/servers/delete-server-modal.tsx` - the delete button
+  waits for the service list to arrive, rather than reading a loading or failed query as "no
+  services will be affected".
+- `apps/dokploy/components/dashboard/monitoring/paid/servers/network-chart.tsx` - an absent value
+  formats as `0`. The guard tested `Number.isNaN`, which is false for `undefined`.
 
 Take upstream's changes to any of these deliberately rather than by default.
+
+The two lists above are the whole set. `git diff HEAD <NEW> -- . ':(exclude)*/proprietary/*' --name-only`
+after a sync prints these files, together with the ones this fork adds rather than edits: the
+replacement modules named above, `UPSTREAM.md`, `NOTICE`, its migration under
+`apps/dokploy/drizzle/`, and its own tests under `apps/dokploy/__test__/`. Anything else it names is
+a hunk the sync dropped or an undocumented divergence, and one of the two has to be fixed before the
+sync is done.
 
 After a sync, re-check that imports still resolve:
 

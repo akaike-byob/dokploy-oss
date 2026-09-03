@@ -125,10 +125,24 @@ export const findComposeById = async (composeId: string) => {
 			deployments: true,
 			mounts: true,
 			domains: true,
-			github: true,
-			gitlab: true,
-			bitbucket: true,
-			gitea: true,
+			github: {
+				columns: {
+					githubClientSecret: false,
+					githubPrivateKey: false,
+					githubWebhookSecret: false,
+				},
+			},
+			gitlab: {
+				columns: { secret: false, accessToken: false, refreshToken: false },
+			},
+			bitbucket: { columns: { appPassword: false, apiToken: false } },
+			gitea: {
+				columns: {
+					clientSecret: false,
+					accessToken: false,
+					refreshToken: false,
+				},
+			},
 			server: true,
 			backups: {
 				with: {
@@ -215,10 +229,12 @@ export const deployCompose = async ({
 	composeId,
 	titleLog = "Manual deployment",
 	descriptionLog = "",
+	freshVolumes = false,
 }: {
 	composeId: string;
 	titleLog: string;
 	descriptionLog: string;
+	freshVolumes?: boolean;
 }) => {
 	const compose = await findComposeById(composeId);
 
@@ -272,6 +288,19 @@ export const deployCompose = async ({
 			}
 		}
 
+		if (freshVolumes && compose.composeType === "docker-compose") {
+			// HOME is needed for ~/.docker/config.json (contexts, registry auth). A failure here must
+			// not abort the deploy, but it must be visible: otherwise the stack comes back up on the
+			// volumes the user was told had been removed.
+			const downCommand = `set -e; env -i PATH="$PATH" HOME="$HOME" docker compose -p ${quote([compose.appName])} down --volumes 2>&1 || echo "Warning: ⚠️ could not remove the volumes, deploying onto the existing ones";`;
+			const downWithLog = `(${downCommand}) >> ${deployment.logPath} 2>&1`;
+			if (compose.serverId) {
+				await execAsyncRemote(compose.serverId, downWithLog);
+			} else {
+				await execAsync(downWithLog);
+			}
+		}
+
 		command = "set -e;";
 		command += await getBuildComposeCommand(entity);
 		commandWithLog = `(${command}) >> ${deployment.logPath} 2>&1`;
@@ -319,7 +348,7 @@ export const deployCompose = async ({
 			projectName: compose.environment.project.name,
 			applicationName: compose.name,
 			applicationType: "compose",
-			// @ts-ignore
+			// @ts-expect-error
 			errorMessage: error?.message || "Error building",
 			buildLink,
 			organizationId: compose.environment.project.organizationId,
@@ -345,10 +374,12 @@ export const rebuildCompose = async ({
 	composeId,
 	titleLog = "Rebuild deployment",
 	descriptionLog = "",
+	freshVolumes = false,
 }: {
 	composeId: string;
 	titleLog: string;
 	descriptionLog: string;
+	freshVolumes?: boolean;
 }) => {
 	const compose = await findComposeById(composeId);
 
@@ -383,6 +414,19 @@ export const rebuildCompose = async ({
 				await execAsyncRemote(compose.serverId, commandWithLog);
 			} else {
 				await execAsync(commandWithLog);
+			}
+		}
+
+		if (freshVolumes && compose.composeType === "docker-compose") {
+			// HOME is needed for ~/.docker/config.json (contexts, registry auth). A failure here must
+			// not abort the deploy, but it must be visible: otherwise the stack comes back up on the
+			// volumes the user was told had been removed.
+			const downCommand = `set -e; env -i PATH="$PATH" HOME="$HOME" docker compose -p ${quote([compose.appName])} down --volumes 2>&1 || echo "Warning: ⚠️ could not remove the volumes, deploying onto the existing ones";`;
+			const downWithLog = `(${downCommand}) >> ${deployment.logPath} 2>&1`;
+			if (compose.serverId) {
+				await execAsyncRemote(compose.serverId, downWithLog);
+			} else {
+				await execAsync(downWithLog);
 			}
 		}
 

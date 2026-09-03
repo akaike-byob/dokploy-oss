@@ -58,7 +58,7 @@ WORKDIR /app
 # Set production
 ENV NODE_ENV=production
 
-RUN apt-get update && apt-get install -y curl unzip zip apache2-utils iproute2 rsync git-lfs && git lfs install && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y tini curl unzip zip apache2-utils iproute2 rsync git-lfs && git lfs install && rm -rf /var/lib/apt/lists/*
 
 # The build tooling the panel shells out to when it deploys other people's applications. None of
 # it depends on this application's own code, so it is installed before the build output is copied
@@ -111,6 +111,9 @@ EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
   CMD curl -fs http://localhost:3000/api/trpc/settings.health || exit 1
+
+# tini reaps HEALTHCHECK child processes that Node (as PID 1) leaves defunct.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Ejecutar node directamente: pnpm como wrapper queda residente (~100MB RSS)
   CMD ["sh", "-c", "node -r dotenv/config dist/wait-for-postgres.mjs && node -r dotenv/config dist/migration.mjs && exec node -r dotenv/config dist/server.mjs"]

@@ -365,7 +365,7 @@ export const ShowBuildChooseForm = ({ applicationId }: Props) => {
 											<FormLabel>Docker Context Path</FormLabel>
 											<FormControl>
 												<Input
-													placeholder="Path of your docker context (default: .)"
+													placeholder="Path of your docker context (default: the Dockerfile's directory)"
 													{...field}
 													value={field.value ?? ""}
 												/>

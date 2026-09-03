@@ -26,6 +26,8 @@ export const getDockerCommand = (application: ApplicationNested) => {
 	try {
 		const image = `${appName}`;
 
+		// An empty dockerContextPath builds from the Dockerfile's own directory, which is what
+		// every application configured before the field existed relies on.
 		const defaultContextPath =
 			dockerFilePath.substring(0, dockerFilePath.lastIndexOf("/") + 1) || ".";
 
