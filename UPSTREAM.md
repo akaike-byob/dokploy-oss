@@ -3,7 +3,7 @@
 This fork tracks Dokploy `main`, the branch carrying the released version tags. It is level with:
 
 ```
-f67fab0675652f8a819e6962f1e510ea0e2ee53b   # v0.30.5
+6dcd0e185939292c9e07b3829c38b669b3c8cb78   # v0.30.6
 ```
 
 ## Why the history starts fresh
@@ -177,7 +177,7 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
   as it compiles, so it cannot be changed on a running container.
 - `apps/dokploy/drizzle/` and its `meta/_journal.json` - carry one migration of this fork's own,
-  `0191_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
+  `0196_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
   migrations sequentially, so a sync brings files that collide with it. Two things need doing.
 
   Renumber this fork's migration to sit after the last one the sync brought, renaming both
@@ -193,31 +193,10 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   fork's entry a second time and applies every upstream one above it. If a sync ever brings a
   migration timestamped below it, raise that one to just above, and never lower a timestamp a
   released image already applied.
-- `packages/server/src/utils/filesystem/directory.ts`,
-  `packages/server/src/utils/builders/docker-file.ts`,
-  `apps/dokploy/components/dashboard/application/build/show.tsx` - an empty `dockerContextPath`
-  builds from the Dockerfile's own directory, and the form's placeholder says so rather than
-  claiming `.`.
-
-  Upstream made an empty value mean the repository root, in
-  [PR #5231](https://github.com/Dokploy/dokploy/pull/5231), merged into v0.30.5. Every application
-  configured before that field existed has an empty value, so the change moves what `COPY` resolves
-  against and the build fails on the first line naming a file beside the Dockerfile. The panel says
-  nothing; the deploy simply stops working.
-
-  This is a defect upstream has not yet noticed rather than a decision it made. The pull request
-  came from a first-time contributor who read the input's placeholder, `default: .`, and changed the
-  code to match the text instead of the text to match the code. It carries no linked issue and no
-  maintainer review. Its `pr-check (test)` job failed on the merged commit, because upstream's own
-  `application.real.test.ts` builds `deno/Dockerfile` from the examples repository and that build
-  needs the Dockerfile's directory as context; it was merged anyway, and v0.30.5 was tagged hours
-  later the same day. A second contributor has since reported on the pull request that `canary` is
-  red for everyone and asked for the fallback to be reverted.
-
-  Drop this divergence once upstream reverts, and check first that the revert is real rather than a
-  test loosened around the new behaviour. If upstream instead keeps the repository root on purpose,
-  taking it needs a migration that writes the Dockerfile's directory into `dockerContextPath` for
-  every application still holding an empty one, so no deploy changes meaning.
+- `apps/dokploy/components/dashboard/application/build/show.tsx` - the form says an empty
+  `dockerContextPath` uses the Dockerfile's directory. Upstream restored that behavior in v0.30.6
+  but still labels the default as `.`, which means the repository root from the command's working
+  directory.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
   which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to

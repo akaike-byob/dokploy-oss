@@ -18,6 +18,7 @@ Contract implemented here:
 | `hasValidLicense`       | always true; this fork has no licensing tier               |
 | `createAuditLog`        | real insert into the Apache-side `audit_log` table         |
 | `getOrganizationOwnerId`| real lookup on the Apache-side `organization` table        |
+| `getPublicWhitelabelingConfig` | null; public pages use stock branding              |
 | `resolveOrganizationDefaultRole` | real lookup of `organization.default_role`, falling back to `member` unless it names `admin` or a row in `organizationRole` |
 
 If an upstream sync adds a new import from a `proprietary` path, add the symbol here.
