@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync upstream"
+  short_description: "Review and sync the latest upstream release"
+  default_prompt: "Use $sync-upstream to review and sync this fork to the latest stable upstream release, then open a PR."
