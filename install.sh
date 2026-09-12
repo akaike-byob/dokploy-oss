@@ -132,7 +132,11 @@ init_postgres() {
 deploy_panel() {
 	if docker service inspect dokploy >/dev/null 2>&1; then
 		log "Updating existing panel service..."
-		docker service update --image "$IMAGE" --force dokploy >/dev/null
+		local host_proc_mount=()
+		if ! docker service inspect dokploy --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' | grep -q '"Target":"/host/proc"'; then
+			host_proc_mount=(--mount-add type=bind,source=/proc,target=/host/proc,readonly)
+		fi
+		docker service update "${host_proc_mount[@]}" --image "$IMAGE" --force dokploy >/dev/null
 		ok "Panel updated"
 		return
 	fi
@@ -152,6 +156,7 @@ deploy_panel() {
 		${db_args[@]+"${db_args[@]}"} \
 		--network dokploy-network \
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+		--mount type=bind,source=/proc,target=/host/proc,readonly \
 		--mount type=bind,source="${BASE_PATH}",target="${BASE_PATH}" \
 		--mount type=volume,source=dokploy-docker-config,target=/root/.docker \
 		--publish published="${PANEL_PORT}",target=3000,mode=host \

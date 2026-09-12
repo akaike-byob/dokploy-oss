@@ -1,6 +1,7 @@
 import { promises } from "node:fs";
 import { OSUtils } from "node-os-utils";
 import { paths } from "../constants";
+import { getHostCpuUsage } from "./host-cpu";
 import { parseIoToMb } from "./units";
 
 export interface Container {
@@ -70,9 +71,13 @@ export const getHostSystemStats = async (): Promise<Container> => {
 		},
 	});
 
-	// Get CPU usage
-	const cpuResult = await osutils.cpu.usage();
-	const cpuUsage = cpuResult.success ? cpuResult.data : 0;
+	const hostCpuUsage = await getHostCpuUsage();
+	let cpuUsage = hostCpuUsage;
+	if (cpuUsage === null) {
+		// Existing installations without the host proc mount retain the old sampler.
+		const cpuResult = await osutils.cpu.usage();
+		cpuUsage = cpuResult.success ? cpuResult.data : 0;
+	}
 
 	// Get memory info
 	const memResult = await osutils.memory.info();
