@@ -1,5 +1,7 @@
 import {
 	createVolumeBackup,
+	findApplicationById,
+	findComposeById,
 	findVolumeBackupById,
 	IS_CLOUD,
 	removeVolumeBackup,
@@ -11,13 +13,18 @@ import {
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import {
+	BUCKET_PATH_MESSAGE,
+	BUCKET_PATH_REGEX,
 	createVolumeBackupSchema,
 	updateVolumeBackupSchema,
 	VOLUME_NAME_MESSAGE,
 	VOLUME_NAME_REGEX,
 	volumeBackups,
 } from "@dokploy/server/db/schema";
-import { findDestinationById } from "@dokploy/server/services/destination";
+import {
+	findDestinationById,
+	findDestinationByIdForOrganization,
+} from "@dokploy/server/services/destination";
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import { findServerById } from "@dokploy/server/services/server";
 import {
@@ -30,6 +37,8 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { audit } from "@/server/api/utils/audit";
 import { assertVolumeBackupLimit } from "@/server/api/utils/plan-limits";
+import { resolveVolumeBackupTarget } from "@/server/api/utils/volume-backup-target";
+import { assertBackupFileInServiceFolder } from "@/server/api/utils/web-server-backup-access";
 import { removeJob, schedule, updateJob } from "@/server/utils/backup";
 import { createTRPCRouter, protectedProcedure, withPermission } from "../trpc";
 
@@ -82,25 +91,15 @@ export const volumeBackupsRouter = createTRPCRouter({
 	create: protectedProcedure
 		.input(createVolumeBackupSchema)
 		.mutation(async ({ input, ctx }) => {
-			const serviceType = (
-				[
-					"application",
-					"postgres",
-					"mysql",
-					"mariadb",
-					"mongo",
-					"redis",
-					"libsql",
-					"compose",
-				] as const
-			).find((type) => input[`${type}Id`]);
-			const serviceId = serviceType ? input[`${serviceType}Id`] : undefined;
-			if (serviceId) {
-				await checkServicePermissionAndAccess(ctx, serviceId, {
-					volumeBackup: ["create"],
-				});
-			}
-			if (IS_CLOUD && serviceType && serviceId) {
+			const { serviceType, serviceId } = resolveVolumeBackupTarget(input);
+			await checkServicePermissionAndAccess(ctx, serviceId, {
+				volumeBackup: ["create"],
+			});
+			await findDestinationByIdForOrganization(
+				input.destinationId,
+				ctx.session.activeOrganizationId,
+			);
+			if (IS_CLOUD) {
 				const existingVolumeBackups = await db.query.volumeBackups.findMany({
 					where: eq(volumeBackups[`${serviceType}Id`], serviceId),
 				});
@@ -109,7 +108,10 @@ export const volumeBackupsRouter = createTRPCRouter({
 					existingVolumeBackups.length,
 				);
 			}
-			const newVolumeBackup = await createVolumeBackup(input);
+			const newVolumeBackup = await createVolumeBackup({
+				...input,
+				serviceType,
+			});
 
 			if (newVolumeBackup?.enabled) {
 				if (IS_CLOUD) {
@@ -201,6 +203,10 @@ export const volumeBackupsRouter = createTRPCRouter({
 					volumeBackup: ["update"],
 				});
 			}
+			await findDestinationByIdForOrganization(
+				input.destinationId,
+				ctx.session.activeOrganizationId,
+			);
 			const updatedVolumeBackup = await updateVolumeBackup(
 				input.volumeBackupId,
 				input,
@@ -285,7 +291,10 @@ export const volumeBackupsRouter = createTRPCRouter({
 		})
 		.input(
 			z.object({
-				backupFileName: z.string().min(1),
+				backupFileName: z
+					.string()
+					.min(1)
+					.regex(BUCKET_PATH_REGEX, BUCKET_PATH_MESSAGE),
 				destinationId: z.string().min(1),
 				volumeName: z
 					.string()
@@ -297,6 +306,24 @@ export const volumeBackupsRouter = createTRPCRouter({
 			}),
 		)
 		.subscription(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.id, {
+				volumeBackup: ["restore"],
+			});
+			const service =
+				input.serviceType === "application"
+					? await findApplicationById(input.id)
+					: await findComposeById(input.id);
+			assertBackupFileInServiceFolder(
+				ctx,
+				service.appName,
+				input.backupFileName,
+			);
+			if ((service.serverId ?? "") !== (input.serverId ?? "")) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "This service does not run on that server.",
+				});
+			}
 			const destination = await findDestinationById(input.destinationId);
 			if (destination.organizationId !== ctx.session.activeOrganizationId) {
 				throw new TRPCError({

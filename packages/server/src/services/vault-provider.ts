@@ -20,10 +20,24 @@ const SENSITIVE_FIELDS: Record<VaultProviderConfig["providerType"], string[]> =
 		hashicorp: ["token"],
 		infisical: ["clientSecret"],
 		aws: ["secretAccessKey"],
+		"aws-parameter-store": ["secretAccessKey"],
 		doppler: ["serviceToken"],
 		azure: ["clientSecret"],
 		scaleway: ["secretKey"],
 		phase: ["token"],
+	};
+
+/** The fields that decide which host receives the secret. */
+const DESTINATION_FIELDS: Record<VaultProviderConfig["providerType"], string[]> =
+	{
+		hashicorp: ["url"],
+		infisical: ["siteUrl"],
+		aws: ["region", "endpoint"],
+		"aws-parameter-store": ["region", "endpoint"],
+		doppler: [],
+		azure: ["vaultUri"],
+		scaleway: ["region", "apiUrl"],
+		phase: ["apiUrl"],
 	};
 
 export const maskVaultProviderConfig = (
@@ -50,6 +64,20 @@ export const mergeVaultProviderConfig = (
 					code: "BAD_REQUEST",
 					message:
 						"Credentials must be re-entered when changing the provider type",
+				});
+			}
+			const destinationChanged = DESTINATION_FIELDS[
+				incoming.providerType
+			].some(
+				(destination) =>
+					merged[destination] !==
+					(existing as Record<string, unknown>)[destination],
+			);
+			if (destinationChanged) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						"Enter the credentials again to change where they are sent",
 				});
 			}
 			merged[field] = (existing as Record<string, unknown>)[field];

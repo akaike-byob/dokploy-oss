@@ -10,7 +10,7 @@ Modifications copyright 2026-present Akaike Technologies.
 This is a modified fork and is not affiliated with, nor endorsed by, Dokploy
 Technology, Inc. "Dokploy" is upstream's name and is not claimed here.
 
-Changes made relative to upstream commit ef0272a4ecd886a7e62cd3b65dd22a010cd36b62:
+Changes made relative to upstream commit 3ac1c8f2e025d7db7696542eb2770e08f598214c:
 
   - Upstream's source-available code, which it keeps under directories named
     "proprietary", is not included. This repository carries only the portion of
@@ -26,6 +26,12 @@ Changes made relative to upstream commit ef0272a4ecd886a7e62cd3b65dd22a010cd36b6
   - install.sh provisions a host and generates the database password into a
     Docker secret, rather than using the shared default compiled into the
     upstream source. apps/dokploy/provision-host.ts exists for that reason.
+
+  - Fixes to authentication, permissions, backups, service transfer and shell
+    quoting change upstream's files. UPSTREAM.md lists each file and its reason.
+
+apps/monitoring is MIT licensed, Copyright 2025 Mauricio Siu. See
+apps/monitoring/LICENSE.md.
 
 UPSTREAM.md records the base commit and the procedure for syncing upstream
 changes.

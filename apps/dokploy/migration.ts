@@ -13,6 +13,8 @@ await migrate(db, { migrationsFolder: "drizzle" })
 	})
 	.catch((error) => {
 		console.log("Migration failed", error);
+		// The image starts the server with `migration && server`, and a partial schema must not serve.
+		process.exitCode = 1;
 	})
 	.finally(() => {
 		sql.end();

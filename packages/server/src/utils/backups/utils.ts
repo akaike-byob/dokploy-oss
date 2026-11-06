@@ -1,5 +1,8 @@
 import { logger } from "@dokploy/server/lib/logger";
-import type { BackupSchedule } from "@dokploy/server/services/backup";
+import {
+	type BackupSchedule,
+	findBackupById,
+} from "@dokploy/server/services/backup";
 import type { Destination } from "@dokploy/server/services/destination";
 import { scheduledJobs, scheduleJob } from "node-schedule";
 import { quote } from "shell-quote";
@@ -13,44 +16,47 @@ import { runPostgresBackup } from "./postgres";
 import { redactRcloneCredentials } from "./redact";
 import { runWebServerBackup } from "./web-server";
 
-export const scheduleBackup = (backup: BackupSchedule) => {
-	const {
-		schedule,
-		backupId,
-		databaseType,
-		postgres,
-		mysql,
-		mongo,
-		mariadb,
-		libsql,
-		compose,
-	} = backup;
+export const scheduleBackup = ({ backupId, schedule }: BackupSchedule) => {
 	scheduleJob(backupId, schedule, async () => {
-		if (backup.backupType === "database") {
-			if (databaseType === "postgres" && postgres) {
-				await runPostgresBackup(postgres, backup);
-				await keepLatestNBackups(backup, postgres.serverId);
-			} else if (databaseType === "mysql" && mysql) {
-				await runMySqlBackup(mysql, backup);
-				await keepLatestNBackups(backup, mysql.serverId);
-			} else if (databaseType === "mongo" && mongo) {
-				await runMongoBackup(mongo, backup);
-				await keepLatestNBackups(backup, mongo.serverId);
-			} else if (databaseType === "mariadb" && mariadb) {
-				await runMariadbBackup(mariadb, backup);
-				await keepLatestNBackups(backup, mariadb.serverId);
-			} else if (databaseType === "libsql" && libsql) {
-				await runLibsqlBackup(libsql, backup);
-				await keepLatestNBackups(backup, libsql.serverId);
-			} else if (databaseType === "web-server") {
-				await runWebServerBackup(backup);
-				await keepLatestNBackups(backup);
-			}
-		} else if (backup.backupType === "compose" && compose) {
-			await runComposeBackup(compose, backup);
-			await keepLatestNBackups(backup, compose.serverId);
+		// node-schedule emits a rejected job as an 'error' event with no listener, which rethrows
+		// as an unhandled rejection.
+		try {
+			await runScheduledBackup(backupId);
+		} catch (error) {
+			logger.error({ backupId, error }, "Scheduled backup failed");
 		}
 	});
+};
+
+const runScheduledBackup = async (backupId: string) => {
+	// A transfer moves the service without re-registering the job, so read the current server.
+	const backup = await findBackupById(backupId);
+	const { databaseType, postgres, mysql, mongo, mariadb, libsql, compose } =
+		backup;
+	if (backup.backupType === "database") {
+		if (databaseType === "postgres" && postgres) {
+			await runPostgresBackup(postgres, backup);
+			await keepLatestNBackups(backup, postgres.serverId);
+		} else if (databaseType === "mysql" && mysql) {
+			await runMySqlBackup(mysql, backup);
+			await keepLatestNBackups(backup, mysql.serverId);
+		} else if (databaseType === "mongo" && mongo) {
+			await runMongoBackup(mongo, backup);
+			await keepLatestNBackups(backup, mongo.serverId);
+		} else if (databaseType === "mariadb" && mariadb) {
+			await runMariadbBackup(mariadb, backup);
+			await keepLatestNBackups(backup, mariadb.serverId);
+		} else if (databaseType === "libsql" && libsql) {
+			await runLibsqlBackup(libsql, backup);
+			await keepLatestNBackups(backup, libsql.serverId);
+		} else if (databaseType === "web-server") {
+			await runWebServerBackup(backup);
+			await keepLatestNBackups(backup);
+		}
+	} else if (backup.backupType === "compose" && compose) {
+		await runComposeBackup(compose, backup);
+		await keepLatestNBackups(backup, compose.serverId);
+	}
 };
 
 export const removeScheduleBackup = (backupId: string) => {
@@ -60,6 +66,13 @@ export const removeScheduleBackup = (backupId: string) => {
 
 export const getBackupTimestamp = () =>
 	new Date().toISOString().replace(/[:.]/g, "-");
+
+export const getBackupFileName = (
+	customName: string | null | undefined,
+	extension: string,
+	fixedPrefix?: string,
+) =>
+	`${[fixedPrefix, customName, getBackupTimestamp()].filter(Boolean).join("-")}.${extension}`;
 
 export const normalizeS3Path = (prefix: string) => {
 	// Trim whitespace and remove leading/trailing slashes
@@ -140,9 +153,9 @@ export const getComposeContainerCommand = (
 	composeType: "stack" | "docker-compose" | undefined,
 ) => {
 	if (composeType === "stack") {
-		return `docker ps -q --filter "status=running" --filter "label=com.docker.stack.namespace=${appName}" --filter "label=com.docker.swarm.service.name=${appName}_${serviceName}" | head -n 1`;
+		return `docker ps -q --filter "status=running" --filter "label=com.docker.stack.namespace=${appName}" --filter ${quote([`label=com.docker.swarm.service.name=${appName}_${serviceName}`])} | head -n 1`;
 	}
-	return `docker ps -q --filter "status=running" --filter "label=com.docker.compose.project=${appName}" --filter "label=com.docker.compose.service=${serviceName}" | head -n 1`;
+	return `docker ps -q --filter "status=running" --filter "label=com.docker.compose.project=${appName}" --filter ${quote([`label=com.docker.compose.service=${serviceName}`])} | head -n 1`;
 };
 
 const getContainerSearchCommand = (backup: BackupSchedule) => {
@@ -265,13 +278,12 @@ export const getBackupCommand = (
 ) => {
 	const containerSearch = getContainerSearchCommand(backup);
 	const backupCommand = generateBackupCommand(backup);
-	const rcloneCommand = `rclone rcat ${rcloneFlags.join(" ")} "${rcloneDestination}"`;
-	const rcloneDeleteCommand = `rclone deletefile ${rcloneFlags.join(" ")} "${rcloneDestination}"`;
+	const rcloneCommand = `rclone rcat ${rcloneFlags.join(" ")} ${quote([rcloneDestination])}`;
+	const rcloneDeleteCommand = `rclone deletefile ${rcloneFlags.join(" ")} ${quote([rcloneDestination])}`;
 
 	logger.info(
 		{
 			containerSearch,
-			backupCommand,
 			rcloneCommand: redactRcloneCredentials(rcloneCommand),
 			logPath,
 		},
@@ -303,3 +315,22 @@ export const getBackupCommand = (
 	echo "Backup done ✅" >> ${logPath};
 	`;
 };
+
+const getServiceAppName = (backup: BackupSchedule) => {
+	if (backup.compose?.appName) {
+		return backup.serviceName
+			? `${backup.compose.appName}_${backup.serviceName}`
+			: backup.compose.appName;
+	}
+	return (
+		backup.postgres?.appName ||
+		backup.mysql?.appName ||
+		backup.mariadb?.appName ||
+		backup.mongo?.appName ||
+		backup.libsql?.appName ||
+		backup.appName
+	);
+};
+
+export const getBackupFolder = (backup: BackupSchedule) =>
+	`${getServiceAppName(backup)}/${normalizeS3Path(backup.prefix)}`;

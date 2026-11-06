@@ -19,5 +19,8 @@ Contract implemented here:
 | `createAuditLog`        | real insert into the Apache-side `audit_log` table         |
 | `getOrganizationOwnerId`| real lookup on the Apache-side `organization` table        |
 | `resolveOrganizationDefaultRole` | real lookup of `organization.default_role`, falling back to `member` unless it names `admin` or a row in `organizationRole` |
+| `getPublicWhitelabelingConfig` | always null; this fork has no whitelabeling |
+| `hasSsoProvider` | real lookup: whether any `sso_provider` row exists |
+| `isSsoEnforced` | the stored `enforceSSO` flag, and only while a provider exists |
 
 If an upstream sync adds a new import from a `proprietary` path, add the symbol here.

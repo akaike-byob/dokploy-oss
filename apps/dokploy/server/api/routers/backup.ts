@@ -15,8 +15,11 @@ import {
 	findPostgresByBackupId,
 	findPostgresById,
 	findServerById,
+	getBackupDownloadUrl,
 	IS_CLOUD,
 	keepLatestNBackups,
+	listBackupFilesByBackupId,
+	type RcloneFile,
 	removeBackupById,
 	removeScheduleBackup,
 	runLibsqlBackup,
@@ -28,7 +31,10 @@ import {
 	scheduleBackup,
 	updateBackupById,
 } from "@dokploy/server";
-import { findDestinationById } from "@dokploy/server/services/destination";
+import {
+	findDestinationById,
+	findDestinationByIdForOrganization,
+} from "@dokploy/server/services/destination";
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import { runComposeBackup } from "@dokploy/server/utils/backups/compose";
 import {
@@ -65,36 +71,55 @@ import {
 	apiRestoreBackup,
 	apiUpdateBackup,
 } from "@/server/db/schema";
+import {
+	assertBackupTypeMatchesTarget,
+	assertBackupFileInServiceFolder,
+	assertCanManageWebServerBackup,
+	resolveBackupTarget,
+} from "@/server/api/utils/web-server-backup-access";
 import { removeJob, schedule, updateJob } from "@/server/utils/backup";
 
-interface RcloneFile {
-	Path: string;
-	Name: string;
-	Size: number;
-	IsDir: boolean;
-	Tier?: string;
-	Hashes?: {
-		MD5?: string;
-		SHA1?: string;
-	};
-}
+const findRestoreTargetAppName = async (
+	input: z.infer<typeof apiRestoreBackup>,
+) => {
+	if (input.backupType === "compose") {
+		return (await findComposeById(input.databaseId)).appName;
+	}
+	switch (input.databaseType) {
+		case "postgres":
+			return (await findPostgresById(input.databaseId)).appName;
+		case "mysql":
+			return (await findMySqlById(input.databaseId)).appName;
+		case "mariadb":
+			return (await findMariadbById(input.databaseId)).appName;
+		case "mongo":
+			return (await findMongoById(input.databaseId)).appName;
+		case "libsql":
+			return (await findLibsqlById(input.databaseId)).appName;
+		case "web-server":
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "A web-server restore names no service",
+			});
+	}
+};
 
 export const backupRouter = createTRPCRouter({
 	create: protectedProcedure
 		.input(apiCreateBackup)
 		.mutation(async ({ input, ctx }) => {
 			try {
-				const serviceId =
-					input.postgresId ||
-					input.mysqlId ||
-					input.mariadbId ||
-					input.mongoId ||
-					input.libsqlId ||
-					input.composeId;
+				const serviceId = resolveBackupTarget(input);
 				if (serviceId) {
 					await checkServicePermissionAndAccess(ctx, serviceId, {
 						backup: ["create"],
 					});
+					await findDestinationByIdForOrganization(
+						input.destinationId,
+						ctx.session.activeOrganizationId,
+					);
+				} else {
+					assertCanManageWebServerBackup(ctx);
 				}
 
 				if (IS_CLOUD) {
@@ -186,6 +211,8 @@ export const backupRouter = createTRPCRouter({
 				await checkServicePermissionAndAccess(ctx, serviceId, {
 					backup: ["read"],
 				});
+			} else {
+				assertCanManageWebServerBackup(ctx);
 			}
 
 			return backup;
@@ -202,10 +229,17 @@ export const backupRouter = createTRPCRouter({
 					existing.mongoId ||
 					existing.libsqlId ||
 					existing.composeId;
+				assertBackupTypeMatchesTarget(serviceId, input.databaseType);
 				if (serviceId) {
 					await checkServicePermissionAndAccess(ctx, serviceId, {
 						backup: ["update"],
 					});
+					await findDestinationByIdForOrganization(
+						input.destinationId,
+						ctx.session.activeOrganizationId,
+					);
+				} else {
+					assertCanManageWebServerBackup(ctx);
 				}
 
 				await updateBackupById(input.backupId, input);
@@ -263,11 +297,13 @@ export const backupRouter = createTRPCRouter({
 					await checkServicePermissionAndAccess(ctx, serviceId, {
 						backup: ["delete"],
 					});
+				} else {
+					assertCanManageWebServerBackup(ctx);
 				}
 
 				const value = await removeBackupById(input.backupId);
 				if (IS_CLOUD && value) {
-					removeJob({
+					await removeJob({
 						backupId: input.backupId,
 						cronSchedule: value.schedule,
 						type: "backup",
@@ -459,6 +495,7 @@ export const backupRouter = createTRPCRouter({
 	manualBackupWebServer: withPermission("backup", "create")
 		.input(apiFindOneBackup)
 		.mutation(async ({ input, ctx }) => {
+			assertCanManageWebServerBackup(ctx);
 			const backup = await findBackupById(input.backupId);
 			await runWebServerBackup(backup);
 			await keepLatestNBackups(backup);
@@ -563,6 +600,27 @@ export const backupRouter = createTRPCRouter({
 			}
 		}),
 
+	listBackupFilesByBackupId: withPermission("backup", "read")
+		.input(z.object({ backupId: z.string() }))
+		.query(({ input, ctx }) => listBackupFilesByBackupId(ctx, input.backupId)),
+
+	getDownloadUrl: withPermission("backup", "read")
+		.input(z.object({ backupId: z.string(), fileName: z.string().min(1) }))
+		.mutation(async ({ input, ctx }) => {
+			const result = await getBackupDownloadUrl(
+				ctx,
+				input.backupId,
+				input.fileName,
+			);
+			await audit(ctx, {
+				action: "download",
+				resourceType: "backup",
+				resourceId: input.backupId,
+				metadata: { file: input.fileName },
+			});
+			return result;
+		}),
+
 	restoreBackupWithLogs: protectedProcedure
 		.meta({
 			openapi: {
@@ -574,12 +632,27 @@ export const backupRouter = createTRPCRouter({
 		})
 		.input(apiRestoreBackup)
 		.subscription(async function* ({ input, ctx, signal }) {
-			if (input.databaseId) {
+			// The settings page sends the user's id as databaseId, so it names no service here.
+			const isWebServerRestore =
+				input.backupType === "database" && input.databaseType === "web-server";
+			if (isWebServerRestore) {
+				assertCanManageWebServerBackup(ctx);
+			} else {
 				await checkServicePermissionAndAccess(ctx, input.databaseId, {
 					backup: ["restore"],
 				});
+				assertBackupFileInServiceFolder(
+					ctx,
+					await findRestoreTargetAppName(input),
+					input.backupFile,
+				);
 			}
-			const destination = await findDestinationById(input.destinationId);
+			const destination = isWebServerRestore
+				? await findDestinationById(input.destinationId)
+				: await findDestinationByIdForOrganization(
+						input.destinationId,
+						ctx.session.activeOrganizationId,
+					);
 			const queue: string[] = [];
 			let done = false;
 			const onLog = (log: string) => queue.push(log);

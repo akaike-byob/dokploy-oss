@@ -16,7 +16,8 @@ import { findDestinationById } from "@dokploy/server/services/destination";
 import { sendDokployBackupNotifications } from "../notifications/dokploy-backup";
 import { execAsync } from "../process/execAsync";
 import { redactRcloneCredentials } from "./redact";
-import { getBackupTimestamp, getS3Credentials, normalizeS3Path } from "./utils";
+import { getBackupFileName, getS3Credentials, normalizeS3Path } from "./utils";
+import { quote } from "shell-quote";
 
 function formatBytes(bytes?: number) {
 	if (bytes === undefined) return "Unknown size";
@@ -42,10 +43,13 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 	try {
 		const destination = await findDestinationById(backup.destinationId);
 		const rcloneFlags = getS3Credentials(destination);
-		const timestamp = getBackupTimestamp();
 		const { BASE_PATH } = paths();
 		const tempDir = await mkdtemp(join(tmpdir(), "dokploy-backup-"));
-		const backupFileName = `webserver-backup-${timestamp}.zip`;
+		const backupFileName = getBackupFileName(
+			backup.customName,
+			"zip",
+			"webserver-backup",
+		);
 		const s3Path = `:s3:${destination.bucket}/${backup.appName}/${normalizeS3Path(backup.prefix)}${backupFileName}`;
 
 		try {
@@ -81,8 +85,9 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 			writeStream.write(`Cleaning up temp file: ${cleanupCommand}\n`);
 			await execAsync(cleanupCommand);
 
+			// Only .git: code/ can hold compose ./ bind mounts and drop uploads.
 			await execAsync(
-				`rsync -a --ignore-errors --no-specials --no-devices --exclude='volume-backups/' --exclude='${ENCRYPTION_KEY_BACKUP_FILE}' ${BASE_PATH}/ ${tempDir}/filesystem/`,
+				`rsync -a --ignore-errors --no-specials --no-devices --exclude='volume-backups/' --exclude='${ENCRYPTION_KEY_BACKUP_FILE}' --exclude='applications/*/code/.git/' --exclude='compose/*/code/.git/' ${BASE_PATH}/ ${tempDir}/filesystem/`,
 			);
 
 			writeStream.write("Copied filesystem to temp directory\n");
@@ -114,7 +119,7 @@ export const runWebServerBackup = async (backup: BackupSchedule) => {
 				// If stat fails, keep undefined
 			}
 
-			const uploadCommand = `rclone copyto ${rcloneFlags.join(" ")} "${zipPath}" "${s3Path}"`;
+			const uploadCommand = `rclone copyto ${rcloneFlags.join(" ")} "${zipPath}" ${quote([s3Path])}`;
 			writeStream.write("Running command to upload backup to S3\n");
 			await execAsync(uploadCommand);
 			writeStream.write("Uploaded backup to S3 ✅\n");

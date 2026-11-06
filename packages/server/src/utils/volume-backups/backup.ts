@@ -8,6 +8,7 @@ import {
 	getS3Credentials,
 	normalizeS3Path,
 } from "../backups/utils";
+import { quote } from "shell-quote";
 
 interface RestartSafeBackupCommandOptions {
 	stopCommand: string;
@@ -65,13 +66,24 @@ export const getVolumeServiceAppName = (
 	return serviceAppName || volumeBackup.appName;
 };
 
+export const getVolumeServiceServerId = (
+	volumeBackup: Awaited<ReturnType<typeof findVolumeBackupById>>,
+) =>
+	volumeBackup.application?.serverId ||
+	volumeBackup.compose?.serverId ||
+	volumeBackup.postgres?.serverId ||
+	volumeBackup.mysql?.serverId ||
+	volumeBackup.mariadb?.serverId ||
+	volumeBackup.mongo?.serverId ||
+	volumeBackup.redis?.serverId ||
+	volumeBackup.libsql?.serverId;
+
 export const backupVolume = async (
 	volumeBackup: Awaited<ReturnType<typeof findVolumeBackupById>>,
 ) => {
 	const { serviceType, volumeName, turnOff, prefix } = volumeBackup;
 	const destination = await findDestinationById(volumeBackup.destinationId);
-	const serverId =
-		volumeBackup.application?.serverId || volumeBackup.compose?.serverId;
+	const serverId = getVolumeServiceServerId(volumeBackup);
 	const { VOLUME_BACKUPS_PATH, VOLUME_BACKUP_LOCK_PATH } = paths(!!serverId);
 	const s3AppName = getVolumeServiceAppName(volumeBackup);
 	const backupFileName = `${volumeName}-${getBackupTimestamp()}.tar`;
@@ -80,8 +92,9 @@ export const backupVolume = async (
 	const rcloneDestination = `:s3:${destination.bucket}/${bucketDestination}`;
 	const volumeBackupPath = path.join(VOLUME_BACKUPS_PATH, volumeBackup.appName);
 
-	const rcloneCommand = `rclone copyto ${rcloneFlags.join(" ")} "${volumeBackupPath}/${backupFileName}" "${rcloneDestination}"`;
+	const rcloneCommand = `rclone copyto ${rcloneFlags.join(" ")} "${volumeBackupPath}/${backupFileName}" ${quote([rcloneDestination])}`;
 
+	// GNU tar exits 1 when a file changes while being read, which is expected on a live volume
 	const backupCommand = `
 	set -e
 	echo "Volume name: ${volumeName}"
@@ -93,7 +106,7 @@ export const backupVolume = async (
   -v ${volumeName}:/volume_data \
   -v ${volumeBackupPath}:/backup \
   ubuntu \
-  bash -c "cd /volume_data && tar cvf /backup/${backupFileName} ."
+  bash -c "cd /volume_data && tar cvf /backup/${backupFileName} . || [ \\$? -eq 1 ]"
   echo "Volume backup done ✅"
   `;
 
@@ -123,7 +136,7 @@ export const backupVolume = async (
 	const lockWrapper = (body: string) => `
 		set -e
 
-		LOCK_PATH="${lockPath}"
+		LOCK_PATH=${quote([lockPath])}
 
 		echo "Waiting for volume backup lock: $LOCK_PATH"
 
@@ -177,20 +190,23 @@ export const backupVolume = async (
 		let startCommand = "";
 
 		if (compose.composeType === "stack") {
+			const stackServiceName = quote([
+				`${compose.appName}_${volumeBackup.serviceName}`,
+			]);
 			stopCommand = `
 			echo "Stopping compose to 0 replicas"
-			echo "Service name: ${compose.appName}_${volumeBackup.serviceName}"
-            ACTUAL_REPLICAS=$(docker service inspect ${compose.appName}_${volumeBackup.serviceName} --format "{{.Spec.Mode.Replicated.Replicas}}")
+			echo Service name: ${stackServiceName}
+            ACTUAL_REPLICAS=$(docker service inspect ${stackServiceName} --format "{{.Spec.Mode.Replicated.Replicas}}")
             echo "Actual replicas: $ACTUAL_REPLICAS"
-            docker service update --replicas=0 ${compose.appName}_${volumeBackup.serviceName}`;
+            docker service update --replicas=0 ${stackServiceName}`;
 
 			startCommand = `
 			echo "Starting compose to $ACTUAL_REPLICAS replicas"
-			docker service update --replicas=$ACTUAL_REPLICAS --with-registry-auth ${compose.appName}_${volumeBackup.serviceName}`;
+			docker service update --replicas=$ACTUAL_REPLICAS --with-registry-auth ${stackServiceName}`;
 		} else {
 			stopCommand = `
 			echo "Stopping compose container"
-            ID=$(docker ps -q --filter "label=com.docker.compose.project=${compose.appName}" --filter "label=com.docker.compose.service=${volumeBackup.serviceName}")
+            ID=$(docker ps -q --filter "label=com.docker.compose.project=${compose.appName}" --filter ${quote([`label=com.docker.compose.service=${volumeBackup.serviceName}`])})
             docker stop $ID`;
 
 			startCommand = `

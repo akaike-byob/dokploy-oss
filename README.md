@@ -35,6 +35,7 @@ Dokploy includes multiple features to make your life easier.
 - **Templates**: Deploy open-source templates (Plausible, Pocketbase, Calcom, etc.) with a single click.
 - **Traefik Integration**: Automatically integrates with Traefik for routing and load balancing.
 - **Real-time Monitoring**: Monitor CPU, memory, storage, and network usage for every resource.
+- **Logs & Metrics**: Ship container logs and host/container metrics to Grafana (Loki, Prometheus/Mimir), Datadog, New Relic, InfluxDB, VictoriaMetrics, Better Stack, Elasticsearch/OpenSearch, Splunk, or AWS CloudWatch, tagged by project/environment/application.
 - **Docker Management**: Easily deploy and manage Docker containers.
 - **CLI/API**: Manage your applications and databases using the command line or through the API.
 - **Notifications**: Get notified when your deployments succeed or fail (via Slack, Discord, Telegram, Email, etc.).
@@ -57,25 +58,34 @@ The OAuth redirect URI is `https://<panel-domain>/api/auth/callback/google`. A b
 when its provider is configured. A Google identity links to an existing account with the same email
 address; once an owner exists, creating a new account still requires an invitation.
 
-**OIDC single sign-on** works too, against any standards-compliant provider. Register one under
+**OIDC single sign-on** works too, against a provider whose endpoints share its issuer's origin. Google
+and Entra do not qualify, so registering them fails. Register a provider under
 **Settings -> SSO** as an owner or admin: provider ID, the email domain it serves, the issuer URL,
 and a client ID and secret. Endpoints are read from the issuer's discovery document unless you give
 an explicit discovery endpoint. Sign-in is then routed by email domain, so a user enters their work
-address and lands at the right provider.
+address and lands at the right provider. A provider can sign in only members of its own organization.
+An owner signs in through a provider only if that owner registered it.
 
 Register the redirect URI the settings page shows, which is
 `https://<panel-domain>/api/auth/sso/callback/<provider-id>`.
 
-Providers can only be added by an authenticated owner or admin. better-auth's own
-`/sso/register` HTTP endpoint stays disabled, as upstream ships it.
+Providers can only be added by an authenticated owner or admin. better-auth's own `/sso/register`,
+`/sso/update-provider` and `/sso/delete-provider` HTTP endpoints are disabled. Removing a provider
+deletes its account links.
+
+Only an owner who has signed in through a provider can turn on **Enforce SSO**, which blocks every
+other sign-in on the panel. An owner or admin can turn it off.
 
 **Audit logs** are recorded and viewable.
 
 **Not implemented:** SAML, SCIM provisioning, custom roles, whitelabeling, and putting deployed
 applications behind an auth gate. The panel says so where each would appear.
 
-There is **no licence tier and no licence server**, so features whose logic lives in the
-Apache-licensed code are simply available.
+There is **no licence tier**, so features whose logic lives in the Apache-licensed code are simply
+available. One call to upstream's licence server remains: a panel moved from a licensed upstream
+install, whose users still hold a licence key, posts each key and the panel's public IP to
+`licenses-api.dokploy.com` every three days. Nothing in this fork writes a key, so a fresh install
+sends nothing.
 
 ## 🚀 Getting Started
 
@@ -97,8 +107,15 @@ The database password is generated per installation and kept in a Docker secret,
 installations share one. Postgres is never published outside the internal overlay network. An
 installation that already has a Postgres service keeps it untouched, credentials included.
 
-To upgrade, re-run the same command; it updates the service in place. To pin a version, set
+To upgrade, re-run the same command. It updates the panel service in place and changes nothing else on
+the host. To pin a version, set
 `IMAGE=ujjwalakaike/dokploy-oss:<tag>`.
+
+A failed migration stops the panel instead of booting it on an old schema. To recover, run
+`docker service rollback dokploy`, which restores the previous image. On images before `v0.31.0`, use
+Update rather than Reload, because Reload there names a tag that does not exist and stops the panel.
+Moving a panel from an upstream image to this one is not supported: this fork's migration stamps
+differ, so `0181` runs again and fails.
 
 The panel's own "Update Available" button updates to **this** image, not upstream's. Point it
 somewhere else with `PANEL_IMAGE`.

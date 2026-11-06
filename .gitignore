@@ -51,3 +51,4 @@ yarn-error.log*
 # and any local tweak showed up as a permanent dirty file.
 .vscode/settings.json
 scratch/
+.scratch/

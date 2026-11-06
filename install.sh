@@ -14,6 +14,7 @@ IMAGE="${IMAGE:-ujjwalakaike/dokploy-oss:latest}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 BASE_PATH="${BASE_PATH:-/etc/dokploy}"
 DB_SECRET="dokploy-postgres-password"
+AUTH_SECRET="dokploy-auth-secret"
 
 log()  { echo "  $*"; }
 ok()   { echo "✅ $*"; }
@@ -145,11 +146,19 @@ deploy_panel() {
 		)
 	fi
 
+	# Without this the panel signs sessions and encrypts columns with a constant from public source.
+	if ! docker secret inspect "$AUTH_SECRET" >/dev/null 2>&1; then
+		openssl rand -hex 32 | tr -d "\n" | docker secret create "$AUTH_SECRET" - >/dev/null
+		ok "Generated the auth secret"
+	fi
+
 	log "Deploying the panel..."
 	docker service create \
 		--name dokploy \
 		--replicas 1 \
 		${db_args[@]+"${db_args[@]}"} \
+		--secret "$AUTH_SECRET" \
+		--env BETTER_AUTH_SECRET_FILE="/run/secrets/${AUTH_SECRET}" \
 		--network dokploy-network \
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
 		--mount type=bind,source="${BASE_PATH}",target="${BASE_PATH}" \
@@ -165,6 +174,14 @@ deploy_panel() {
 main() {
 	require_root
 	require_linux
+
+	# The host bootstrap recreates Traefik with no env or ports, so a re-run must not reach it.
+	if docker service inspect dokploy >/dev/null 2>&1; then
+		deploy_panel
+		ok "Done. The panel image is updated."
+		return
+	fi
+
 	require_free_ports
 	install_docker
 	init_swarm

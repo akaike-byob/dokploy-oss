@@ -29,6 +29,7 @@ import {
 	type LucideIcon,
 	Package,
 	Palette,
+	ScrollText,
 	Server,
 	ShieldCheck,
 	Smartphone,
@@ -43,6 +44,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { TruncateTooltip } from "@/components/shared/truncate-tooltip";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -99,6 +101,7 @@ import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import type { AppRouter } from "@/server/api/root";
 import { api } from "@/utils/api";
+import { TrialBanner } from "../dashboard/billing/trial-banner";
 import { AddOrganization } from "../dashboard/organization/handle-organization";
 import { DialogAction } from "../shared/dialog-action";
 import { Logo } from "../shared/logo";
@@ -188,9 +191,11 @@ const MENU: Menu = {
 			title: "Monitoring",
 			url: "/dashboard/monitoring",
 			icon: BarChartHorizontalBigIcon,
-			// Only enabled in non-cloud environments and if user has monitoring.read
+			// Only enabled in non-cloud environments (product decision) and if user has monitoring.read and docker.read
 			isEnabled: ({ isCloud, permissions }) =>
-				!isCloud && !!permissions?.monitoring.read,
+				!isCloud &&
+				!!permissions?.monitoring.read &&
+				!!permissions?.docker.read,
 		},
 		{
 			isSingle: true,
@@ -347,7 +352,13 @@ const MENU: Menu = {
 			icon: BotIcon,
 			url: "/dashboard/settings/ai",
 			isSingle: true,
-			isEnabled: ({ permissions }) => !!permissions?.organization.update,
+			isEnabled: ({ permissions }) =>
+				!!(
+					permissions?.ai.read ||
+					permissions?.ai.create ||
+					permissions?.ai.update ||
+					permissions?.ai.delete
+				),
 		},
 		{
 			isSingle: true,
@@ -370,6 +381,13 @@ const MENU: Menu = {
 			url: "/dashboard/settings/registry",
 			icon: Package,
 			isEnabled: ({ permissions }) => !!permissions?.registry.read,
+		},
+		{
+			isSingle: true,
+			title: "Logs & Metrics",
+			url: "/dashboard/settings/logs-and-metrics",
+			icon: ScrollText,
+			isEnabled: ({ permissions }) => !!permissions?.telemetryProvider.read,
 		},
 		{
 			isSingle: true,
@@ -613,7 +631,7 @@ function SidebarLogo() {
 					)}
 				>
 					{/* Organization Logo and Selector */}
-					<SidebarMenuItem className={"w-full"}>
+					<SidebarMenuItem className={"w-full min-w-0"}>
 						<Popover
 							open={organizationSelectorOpen}
 							onOpenChange={setOrganizationSelectorOpen}
@@ -629,14 +647,13 @@ function SidebarLogo() {
 								>
 									<div
 										className={cn(
-											"flex items-center gap-2",
+											"flex min-w-0 flex-1 items-center gap-2",
 											isCollapsed && "justify-center",
 										)}
 									>
 										<div
 											className={cn(
-												"flex items-center justify-center rounded-sm border",
-												"size-6",
+												"flex size-6 shrink-0 items-center justify-center rounded-sm border",
 											)}
 										>
 											<Logo
@@ -649,19 +666,22 @@ function SidebarLogo() {
 										</div>
 										<div
 											className={cn(
-												"flex flex-col items-start",
+												"flex flex-col items-start min-w-0 flex-1",
 												isCollapsed && "hidden",
 											)}
 										>
-											<div className="flex items-center gap-1.5">
-												<p className="text-sm font-medium leading-none">
-													{activeOrganization?.name ?? "Select Organization"}
-												</p>
+											<div className="flex items-center gap-1.5 min-w-0 w-full">
+												<TruncateTooltip
+													text={
+														activeOrganization?.name ?? "Select Organization"
+													}
+													className="text-sm font-medium"
+												/>
 											</div>
 										</div>
 									</div>
 									<ChevronsUpDown
-										className={cn("ml-auto", isCollapsed && "hidden")}
+										className={cn("ml-auto shrink-0", isCollapsed && "hidden")}
 									/>
 								</SidebarMenuButton>
 							</PopoverTrigger>
@@ -1218,6 +1238,7 @@ export default function Page({ children }: Props) {
 				<SidebarRail />
 			</Sidebar>
 			<SidebarInset>
+				{isCloud === true && <TrialBanner />}
 				{!includesProjects && (
 					<header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
 						<div className="flex items-center justify-between w-full px-4">

@@ -6,7 +6,11 @@ import { sso } from "@better-auth/sso";
 import * as bcrypt from "bcrypt";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import {
+	APIError,
+	createAuthMiddleware,
+	getSessionFromCtx,
+} from "better-auth/api";
 import { admin, organization, twoFactor } from "better-auth/plugins";
 import { and, desc, eq } from "drizzle-orm";
 import { IS_CLOUD } from "../constants";
@@ -19,12 +23,17 @@ import {
 } from "../services/admin";
 import { createAuditLog } from "../services/proprietary/audit-log";
 import { resolveOrganizationDefaultRole } from "../services/proprietary/license-key";
+import {
+	assertSsoAccountLinkAllowed,
+	isSsoEnforced,
+} from "../services/proprietary/sso";
 import { storedSocialCredentials } from "../services/social-auth";
 import {
 	getWebServerSettings,
 	updateWebServerSettings,
 } from "../services/web-server-settings";
 import { getHubSpotUTK, submitToHubSpot } from "../utils/tracking/hubspot";
+import { captureEvent, getPostHogSessionId } from "../utils/tracking/posthog";
 import {
 	sendEmail,
 	sendVerificationEmail,
@@ -80,9 +89,17 @@ const createBetterAuth = () =>
 		}),
 		disabledPaths: [
 			"/sso/register",
+			// These change a provider's issuer and keep its account links, which hands the accounts over.
+			"/sso/update-provider",
+			"/sso/delete-provider",
 			"/organization/create",
 			"/organization/update",
 			"/organization/delete",
+			// GHSA-j8v8-g9cx-5qf4: SCIM providers are managed via tRPC, org-scoped only.
+			"/scim/generate-token",
+			"/scim/list-provider-connections",
+			"/scim/get-provider-connection",
+			"/scim/delete-provider-connection",
 			...(!IS_CLOUD ? ["/verify-email"] : []),
 		],
 		secret: betterAuthSecret,
@@ -106,16 +123,15 @@ const createBetterAuth = () =>
 		account: {
 			accountLinking: {
 				enabled: true,
-				async trustedProviders() {
-					const fromDb = await getTrustedProviders();
-					return ["github", "google", ...fromDb];
-				},
+				// GitHub and Google stay off this list, because trust also links an unverified address.
+				trustedProviders: getTrustedProviders,
 				allowDifferentEmails: true,
 				// better-auth otherwise refuses to link a social identity to an existing account
 				// whose email is unverified, and a self-hosted panel never verifies one: email
 				// verification is disabled outside cloud, so every local account stays unverified
 				// and every first Google or SSO sign-in fails with "account not linked".
-				// The identity still has to come from a trusted provider that verified the address.
+				// The identity still has to come from a registered SSO provider, or carry an address
+				// that the social provider verified.
 				requireLocalEmailVerified: IS_CLOUD,
 			},
 		},
@@ -136,6 +152,14 @@ const createBetterAuth = () =>
 		trustedOrigins: resolveTrustedOrigins,
 		hooks: {
 			before: createAuthMiddleware(async (ctx) => {
+				if (
+					ctx.path?.startsWith("/sso/") &&
+					schema.RESERVED_SSO_PROVIDER_IDS.includes(ctx.params?.providerId)
+				) {
+					throw new APIError("FORBIDDEN", {
+						message: "This SSO provider id is reserved",
+					});
+				}
 				// An SSO provider's issuer has to be a trusted origin before its discovery
 				// document can be fetched; lib/sso-trusted-origins.ts explains why that trust is
 				// scoped to /sso rather than granted on every auth endpoint.
@@ -168,6 +192,42 @@ const createBetterAuth = () =>
 					...(await resolveTrustedOrigins()),
 					...ssoOrigins,
 				].filter(Boolean);
+
+				if (ctx.path === "/admin/remove-user") {
+					throw new APIError("FORBIDDEN", {
+						message: "Use the account deletion flow to remove users",
+					});
+				}
+
+				if (ctx.path === "/two-factor/enable") {
+					const session = await getSessionFromCtx(ctx);
+					if (session && !session.user.twoFactorEnabled) {
+						await db
+							.update(schema.twoFactor)
+							.set({ verified: false })
+							.where(
+								and(
+									eq(schema.twoFactor.userId, session.user.id),
+									eq(schema.twoFactor.verified, true),
+								),
+							);
+					}
+				}
+
+				const isBlockedAuthPath =
+					ctx.path.startsWith("/sign-in/email") ||
+					ctx.path.startsWith("/sign-in/social") ||
+					ctx.path.startsWith("/sign-in/passkey") ||
+					ctx.path.startsWith("/sign-up/email") ||
+					ctx.path.startsWith("/passkey/verify-authentication") ||
+					ctx.path.startsWith("/passkey/generate-authenticate-options");
+
+				if (!IS_CLOUD && isBlockedAuthPath && (await isSsoEnforced())) {
+					throw new APIError("FORBIDDEN", {
+						message:
+							"SSO is enforced. Direct password, social, and passkey sign-in are disabled.",
+					});
+				}
 			}),
 		},
 		emailVerification: {
@@ -208,6 +268,13 @@ const createBetterAuth = () =>
 			},
 		},
 		databaseHooks: {
+			account: {
+				create: {
+					before: async (account) => {
+						await assertSsoAccountLinkAllowed(account);
+					},
+				},
+			},
 			user: {
 				create: {
 					before: async (_user, context) => {
@@ -317,7 +384,7 @@ const createBetterAuth = () =>
 						}
 
 						if (IS_CLOUD || !isAdminPresent) {
-							await db.transaction(async (tx) => {
+							const createdOrganization = await db.transaction(async (tx) => {
 								const organization = await tx
 									.insert(schema.organization)
 									.values({
@@ -335,7 +402,23 @@ const createBetterAuth = () =>
 									createdAt: new Date(),
 									isDefault: true, // Mark first organization as default
 								});
+
+								return organization;
 							});
+
+							if (IS_CLOUD) {
+								void captureEvent({
+									distinctId: user.id,
+									event: "user_signed_up",
+									organizationId: createdOrganization?.id,
+									sessionId: getPostHogSessionId(context?.request?.headers),
+									properties: {
+										method: context?.path,
+										$set: { email: user.email, name: user.name },
+										$set_once: { signed_up_at: new Date().toISOString() },
+									},
+								});
+							}
 						} else if (isSSORequest) {
 							const providerId = context?.params?.providerId;
 							if (!providerId) {

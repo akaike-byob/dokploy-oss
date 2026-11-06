@@ -5,9 +5,7 @@ import { describe, expect, it } from "vitest";
 
 // An empty dockerContextPath means the Dockerfile's own directory. Every application configured
 // before the field existed holds an empty value, so moving what COPY resolves against breaks their
-// builds silently. Upstream changed this to the repository root in v0.30.5; UPSTREAM.md records
-// why this fork keeps the original meaning, and these tests fail if a sync takes upstream's
-// version back.
+// builds silently.
 
 const { APPLICATIONS_PATH } = paths();
 const codePath = `${APPLICATIONS_PATH}/app-name/code`;
@@ -58,5 +56,32 @@ describe("docker context path", () => {
 		);
 
 		expect(command).toContain(`cd ${codePath}/packages/api`);
+	});
+
+	it("quotes the Dockerfile path and build stage, which reach the host shell", () => {
+		const command = getDockerCommand(
+			application({
+				dockerfile: "my dir/Dockerfile",
+				dockerBuildStage: "x; touch /tmp/pwned",
+			}),
+		);
+
+		const buildLine = command
+			.split("\n")
+			.find((line: string) => line.includes("docker build"));
+		expect(buildLine).toContain(`-f '${codePath}/my dir/Dockerfile'`);
+		expect(buildLine).toContain("--target 'x; touch /tmp/pwned'");
+	});
+
+	it("passes the context as `.` after cd, which needs no quoting", () => {
+		const command = getDockerCommand(
+			application({ dockerContextPath: "my dir;touch /tmp/pwned" }),
+		);
+
+		const buildLine = command
+			.split("\n")
+			.find((line: string) => line.includes("docker build"));
+		expect(buildLine).toMatch(/ \.( |$)/);
+		expect(buildLine).not.toContain("my dir");
 	});
 });

@@ -1,4 +1,6 @@
-All content in this repository is licensed under the Apache License, Version 2.0.
+All content in this repository is licensed under the Apache License, Version 2.0, except
+apps/monitoring, which is MIT licensed (apps/monitoring/LICENSE.md), and the third-party logos in
+.github/sponsors, which remain their owners' marks.
 
 This is a modified fork of Dokploy (https://github.com/Dokploy/dokploy). Upstream is dual-licensed
 and keeps its source-available code under directories named "/proprietary". No such code is present

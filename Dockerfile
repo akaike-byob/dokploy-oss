@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.4.0-slim AS base
+FROM node:24.22.1-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -94,6 +94,7 @@ COPY --from=build /prod/dokploy/drizzle ./drizzle
 COPY .env.production ./.env
 COPY --from=build /prod/dokploy/components.json ./components.json
 COPY --from=build /prod/dokploy/node_modules ./node_modules
+COPY LICENSE.MD NOTICE ./
 
 # Declared last: the value changes on every build, and anything after an ARG is rebuilt, so it
 # must sit past the expensive layers. The panel reports this as its version and compares it
