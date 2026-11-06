@@ -42,6 +42,8 @@ export * from "./social-auth";
 export * from "./ssh-key";
 export * from "./sso";
 export * from "./tag";
+export * from "./telemetry-provider";
+export * from "./transfer";
 export * from "./user";
 export * from "./utils";
 export * from "./vault-provider";

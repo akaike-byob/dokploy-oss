@@ -9,10 +9,14 @@ interface Whitelabeling {
 	appName: string | null;
 	appDescription: string | null;
 	logoUrl: string | null;
+	logoLightUrl: string | null;
 	loginLogoUrl: string | null;
+	loginLogoLightUrl: string | null;
 	footerText: string | null;
 	docsUrl: string | null;
 	supportUrl: string | null;
+	supportEmail: string | null;
+	passwordResetGuide: string | null;
 	errorPageTitle: string | null;
 	errorPageDescription: string | null;
 }

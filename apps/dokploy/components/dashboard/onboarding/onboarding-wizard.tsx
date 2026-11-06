@@ -16,6 +16,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/utils/api";
+import { PANEL_REPO_URL } from "@/lib/panel-repo";
 import { getOnboardingState, setOnboardingState } from "./onboarding-lock";
 import { CompleteStep } from "./steps/complete-step";
 import { DeployStep } from "./steps/deploy-step";
@@ -76,7 +77,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 		if (nextId) stepper.goTo(nextId);
 	};
 
-	// A step id restored from localStorage, or left over from before the query answered, can name a
+	// A step id restored from the saved onboarding state, or left over from before the query answered, can name a
 	// step this panel does not show. It would otherwise keep rendering with no way forward, since
 	// every "next" resolves against the visible list and lands back at the first step.
 	useEffect(() => {
@@ -211,7 +212,7 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 							)}
 							<div className="flex items-center gap-3 text-zinc-500">
 								<Link
-									href="https://github.com/dokploy/dokploy"
+									href={PANEL_REPO_URL}
 									target="_blank"
 									className="hover:text-zinc-200 transition-colors"
 								>
@@ -297,8 +298,9 @@ export const OnboardingWizard = ({ onClose }: Props) => {
 						<DialogTitle>Skip onboarding?</DialogTitle>
 						<DialogDescription>
 							If this is your first time using Dokploy, we recommend going
-							through these steps — it only takes a couple of minutes and gives
-							you a feel for how projects, servers and deployments fit together.
+							through these steps – it only takes a couple of minutes and gives
+							you a feel for how projects, servers, and deployments fit
+							together.
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>

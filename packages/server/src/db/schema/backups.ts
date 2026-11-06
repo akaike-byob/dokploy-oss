@@ -14,6 +14,12 @@ import { z } from "zod";
 import { generateAppName } from ".";
 import { compose } from "./compose";
 import { deployments } from "./deployment";
+import {
+	BUCKET_PATH_MESSAGE,
+	BUCKET_PATH_REGEX,
+	COMPOSE_SERVICE_NAME_MESSAGE,
+	COMPOSE_SERVICE_NAME_REGEX,
+} from "./utils";
 import { destinations } from "./destination";
 import { libsql } from "./libsql";
 import { mariadb } from "./mariadb";
@@ -45,6 +51,7 @@ export const backups = pgTable("backup", {
 	enabled: boolean("enabled"),
 	database: text("database").notNull(),
 	prefix: text("prefix").notNull(),
+	customName: text("customName"),
 	serviceName: text("serviceName"),
 	destinationId: text("destinationId")
 		.notNull()
@@ -139,11 +146,27 @@ export const backupsRelations = relations(backups, ({ one, many }) => ({
 	deployments: many(deployments),
 }));
 
+const customNameSchema = z
+	.string()
+	.trim()
+	.max(100, "Custom name must be 100 characters or less")
+	.regex(
+		/^([a-zA-Z0-9][a-zA-Z0-9._-]*)?$/,
+		"Must start with a letter or number; only letters, numbers, dots, hyphens and underscores are allowed",
+	)
+	.optional();
+
 const createSchema = createInsertSchema(backups, {
 	backupId: z.string(),
 	destinationId: z.string(),
 	enabled: z.boolean().optional(),
-	prefix: z.string().min(1),
+	prefix: z.string().min(1).regex(BUCKET_PATH_REGEX, BUCKET_PATH_MESSAGE),
+	serviceName: z
+		.string()
+		.regex(COMPOSE_SERVICE_NAME_REGEX, COMPOSE_SERVICE_NAME_MESSAGE)
+		.nullable()
+		.optional(),
+	customName: customNameSchema,
 	database: z.string().min(1),
 	schedule: z.string(),
 	keepLatestCount: z.number().optional(),
@@ -169,6 +192,7 @@ export const apiCreateBackup = createSchema.pick({
 	schedule: true,
 	enabled: true,
 	prefix: true,
+	customName: true,
 	destinationId: true,
 	keepLatestCount: true,
 	database: true,
@@ -212,6 +236,7 @@ export const apiUpdateBackup = createSchema
 	.required()
 	.extend({
 		includeEncryptionKey: z.boolean().optional(),
+		customName: customNameSchema,
 	});
 
 export const apiRestoreBackup = z.object({

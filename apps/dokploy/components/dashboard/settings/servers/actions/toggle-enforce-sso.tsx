@@ -19,8 +19,10 @@ export const ToggleEnforceSSO = () => {
 			await mutateAsync({ enforceSSO: checked });
 			await refetch();
 			toast.success("Enforce SSO updated");
-		} catch {
-			toast.error("Error updating Enforce SSO");
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Error updating Enforce SSO",
+			);
 		}
 	};
 

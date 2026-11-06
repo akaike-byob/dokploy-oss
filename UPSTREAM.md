@@ -3,7 +3,7 @@
 This fork tracks Dokploy `main`, the branch carrying the released version tags. It is level with:
 
 ```
-f67fab0675652f8a819e6962f1e510ea0e2ee53b   # v0.30.5
+3ac1c8f2e025d7db7696542eb2770e08f598214c   # v0.31.0
 ```
 
 ## Why the history starts fresh
@@ -12,7 +12,8 @@ Upstream is dual-licensed (`LICENSE.MD`): everything outside a `/proprietary` di
 License 2.0, everything under one is the Dokploy Source Available License, which forbids
 redistribution.
 
-This fork carries only the Apache-licensed portion. The three proprietary directories are absent:
+This fork carries only the Apache-licensed portion. Upstream's files in these three directories are
+absent, and this fork's own replacement modules sit at the same paths:
 
 ```
 apps/dokploy/components/proprietary/
@@ -21,8 +22,9 @@ packages/server/src/services/proprietary/
 ```
 
 Deleting them in a later commit would not be enough, because every earlier commit would still serve
-them. So history begins at a single commit of the already-stripped tree, and no source-available
-file has ever existed in this repository.
+them. So history begins at a single commit of the already-stripped tree. That root commit,
+`f6a104216`, still carries upstream's `LICENSE_PROPRIETARY.md`, the text of the licence and no code
+under it, and `32833733b` deletes the file. No other source-available file exists in this history.
 
 ## Syncing upstream changes
 
@@ -46,7 +48,7 @@ Sync by applying a filtered patch instead:
 ```sh
 # BASE is the commit recorded above; NEW is the upstream commit to move to.
 git fetch upstream main
-git diff --binary <BASE>..upstream/main -- . ':(exclude)*/proprietary/*' > /tmp/upstream.patch
+git diff --binary <BASE>..upstream/main -- . ':(exclude)*/proprietary/*' ':(exclude).github/workflows/*' > /tmp/upstream.patch
 git apply --3way /tmp/upstream.patch
 ```
 
@@ -75,8 +77,8 @@ What each pass is looking for:
 
 - **Behaviour that changes for data already in the database.** A new default, a widened enum, a
   column whose absence used to mean one thing, a permission that gates what was ungated. Ask what
-  an existing row does under the new code, not what a fresh install does. This is the failure the
-  `dockerContextPath` entry below records, and reading the diff is what found it.
+  an existing row does under the new code, not what a fresh install does. An empty
+  `dockerContextPath` is the standing example, and reading the diff is what found it.
 - **The pull request behind a suspicious commit.** `gh api repos/Dokploy/dokploy/pulls/<n>` gives
   the description and the discussion; `gh api repos/Dokploy/dokploy/commits/<sha>/check-runs` gives
   what CI said about the commit that was merged. A red `pr-check (test)`, no linked issue and no
@@ -103,19 +105,31 @@ below with the reason and the condition for dropping it.
 
 ## Push hygiene
 
-This clone keeps upstream's objects locally so patches can be generated. Only `main` is safe to
-publish. Push it by name and never with `--all` or `--mirror`, which would carry local branches that
-do contain upstream history.
+This clone keeps upstream's objects locally so patches can be generated. Fork branches and
+`*-akaike.*` tags are safe to publish, because none of them reaches upstream's history. A bare `v*`
+tag and every `refs/remotes/upstream/*` ref are upstream's, so `git push origin v0.31.0` publishes
+upstream's history with its source-available files. Push fork refs by name, and never use `--all`,
+`--mirror`, `--tags` or `--follow-tags`.
+
+`git fetch upstream main` follows upstream's tags into this clone. Use `--no-tags` unless a sync needs
+a tag. Nothing enforces these rules: Git hooks are per clone, and this repository ships none. A
+pre-push hook that refuses any ref reaching `48bf9a162` would enforce them on one clone.
 
 Before any push to a new remote, confirm no upstream source-available blob is reachable. The
 directories named `proprietary` in this repository hold this fork's own replacement modules (see
 below), so the check lists what is reachable and expects only those paths:
 
 ```sh
-git rev-list --objects main | grep proprietary | awk '{print $2}' | sort -u
+git rev-list --objects main | grep -i proprietary | awk '{print $2}' | sort -u
 ```
 
-Every path it prints must be a file listed in one of the three replacement READMEs.
+Every path it prints must be `LICENSE_PROPRIETARY.md` from the root commit, or a file this fork
+wrote under one of the three replacement directories.
+
+This check compares names only. It passes a copied upstream file at a fork path, and it reads only
+`main`. Before publishing a ref, also compare its blob ids with those of upstream's refs, excluding
+this fork's tags. Blob ids find exact copies only, so read any new module for overlap with upstream
+through the contract it implements, never through upstream's text.
 
 ## Replacement modules
 
@@ -131,7 +145,8 @@ apps/dokploy/server/api/routers/proprietary/
 packages/server/src/services/proprietary/
 ```
 
-Each directory carries a README describing the contract it implements. The code there is original
+The two server directories carry a README describing the contract they implement. The code there is
+original
 work for this fork and carries no source-available code or terms; the directory name is upstream's
 module path, nothing more.
 
@@ -148,7 +163,7 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   themselves whether to appear, based on whether the provider is configured.
 - `apps/dokploy/esbuild.config.ts` - builds `setup.ts` into `dist/setup.mjs` and this fork's
   `provision-host.ts` into `dist/provision-host.mjs`, so the published image can run the app's own
-  host bootstrap. `install.sh` depends on both.
+  host bootstrap. `install.sh` runs `dist/provision-host.mjs`.
 - `packages/server/src/lib/auth.ts` - sets `requireLocalEmailVerified` to `IS_CLOUD`. better-auth
   defaults it to true and then refuses to link a social identity to an existing account whose email
   is unverified. A self-hosted panel disables email verification, so every local account stays
@@ -161,6 +176,7 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   endpoints that resolve one, from `lib/social-auth-providers.ts`. better-auth builds its provider
   list once, out of the options the instance was created with, so credentials registered from the
   panel would otherwise take effect only after a restart.
+  It also reads SSO enforcement from `isSsoEnforced`, listed with the fixes below.
 - `LICENSE.MD`, and `NOTICE` - carry the full Apache-2.0 text and the statement of changes that
   Apache-2.0 section 4 requires of a public distribution. `LICENSE_PROPRIETARY.md` is absent, since
   no code it applies to is present.
@@ -177,66 +193,61 @@ Upstream files edited here, and therefore the only places a sync can conflict:
   `NEXT_PUBLIC_PANEL_REPO_URL` has to be one of them: Next.js inlines it into the client bundle
   as it compiles, so it cannot be changed on a running container.
 - `apps/dokploy/drizzle/` and its `meta/_journal.json` - carry one migration of this fork's own,
-  `0191_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
+  `0199_loud_carmella_unuscione`, for the `socialAuthProvider` table. Upstream numbers its
   migrations sequentially, so a sync brings files that collide with it. Two things need doing.
 
   Renumber this fork's migration to sit after the last one the sync brought, renaming both
   `<tag>.sql` and `meta/<idx>_snapshot.json`, and rebuild that snapshot as upstream's newest
-  snapshot plus this fork's table, with `prevId` set to the id of the snapshot before it. The
+  snapshot plus this fork's table and its `socialAuthProviderId` enum, with `prevId` set to the id
+  of the snapshot before it. The
   numbers cannot simply coexist: `meta/0181_snapshot.json` is one filename whoever wrote it.
 
   Keep the `when` of this fork's migration exactly as generated, at 1787171678956, and check that
   every migration the sync brought carries a later one. Drizzle applies a migration only when
   `folderMillis` exceeds the single newest `created_at` in `drizzle.__drizzle_migrations`, read
   once before the loop and never during it, so the index and the array order decide nothing. A
-  panel that already ran this fork's migration holds that timestamp as its newest, which skips the
-  fork's entry a second time and applies every upstream one above it. If a sync ever brings a
-  migration timestamped below it, raise that one to just above, and never lower a timestamp a
-  released image already applied.
-- `packages/server/src/utils/filesystem/directory.ts`,
-  `packages/server/src/utils/builders/docker-file.ts`,
-  `apps/dokploy/components/dashboard/application/build/show.tsx` - an empty `dockerContextPath`
-  builds from the Dockerfile's own directory, and the form's placeholder says so rather than
-  claiming `.`.
+  panel that ran this fork's migration holds a newest stamp at or above that timestamp, which
+  skips the fork's entry a second time and applies every upstream one above it. If a sync ever
+  brings a migration timestamped below it, raise that one to just above, and never lower a timestamp
+  a released image already applied.
 
-  Upstream made an empty value mean the repository root, in
-  [PR #5231](https://github.com/Dokploy/dokploy/pull/5231), merged into v0.30.5. Every application
-  configured before that field existed has an empty value, so the change moves what `COPY` resolves
-  against and the build fails on the first line naming a file beside the Dockerfile. The panel says
-  nothing; the deploy simply stops working.
-
-  This is a defect upstream has not yet noticed rather than a decision it made. The pull request
-  came from a first-time contributor who read the input's placeholder, `default: .`, and changed the
-  code to match the text instead of the text to match the code. It carries no linked issue and no
-  maintainer review. Its `pr-check (test)` job failed on the merged commit, because upstream's own
-  `application.real.test.ts` builds `deno/Dockerfile` from the examples repository and that build
-  needs the Dockerfile's directory as context; it was merged anyway, and v0.30.5 was tagged hours
-  later the same day. A second contributor has since reported on the pull request that `canary` is
-  red for everyone and asked for the fallback to be reverted.
-
-  Drop this divergence once upstream reverts, and check first that the revert is real rather than a
-  test loosened around the new behaviour. If upstream instead keeps the repository root on purpose,
-  taking it needs a migration that writes the Dockerfile's directory into `dockerContextPath` for
-  every application still holding an empty one, so no deploy changes meaning.
+  Migrations 0181 to 0185 carry this fork's stamps, 1787171678957 to 1787171678961, because upstream's
+  sit below the fork's own. Taking upstream's journal lowers them, and a panel on
+  `v0.29.15-akaike.18` then skips 0181 and fails at 0188. Restore them after every sync.
+  `apps/dokploy/__test__/migrations/journal-timestamps.test.ts` fails if a released image would skip
+  a migration; add each new release to its table.
+- `packages/server/src/utils/builders/docker-file.ts` - passes the build context as `.`, after the
+  `cd` into it, and quotes the Dockerfile path and build stage. Upstream's build line joins these
+  unquoted, so a space stops the build and a shell metacharacter runs on the host. Drop this once
+  upstream quotes the build line.
+- `apps/dokploy/components/dashboard/application/build/show.tsx` - the context path placeholder says
+  an empty value means the Dockerfile's directory. Upstream's says `default: .`, which is not what
+  its code does. Drop this once upstream corrects the text.
 - `.github/workflows/` - upstream's release automation publishes to Dokploy's own registries and
   pushes to Dokploy's other repositories, so it is absent, and so is `upgrade-integration-test.yml`,
   which upgrades between upstream's published image tags. `image.yml` publishes this fork's image to
   Docker Hub; `pull-request.yml` is upstream's, unchanged.
 - `apps/dokploy/pages/_error.tsx`, `apps/dokploy/components/layouts/onboarding-layout.tsx`,
   `apps/dokploy/components/dashboard/settings/web-server/update-server.tsx`,
-  `apps/dokploy/server/api/routers/notification.ts` and the seven templates in
+  `apps/dokploy/components/dashboard/onboarding/onboarding-wizard.tsx`,
+  `apps/dokploy/server/api/routers/notification.ts` and the templates in
   `packages/server/src/emails/emails/` - point their repository, releases, issues and logo links at
   this fork, from `apps/dokploy/lib/panel-repo.ts` and `services/panel-build.ts`. Upstream's links
   describe a build the operator is not running. New upstream screens arrive with the hardcoded
   Dokploy links; check for them after a sync.
-- `apps/dokploy/pages/dashboard/settings/sso.tsx` - drops upstream's `GoogleAuthSettings` card. The
-  Google form lives in this fork's own SSO settings instead, since upstream's is source-available.
+- `apps/dokploy/pages/dashboard/settings/sso.tsx` - renders this fork's `GoogleAuthSettings` card,
+  since upstream's page has no way to configure Google sign-in.
 - `packages/server/src/index.ts`, `packages/server/src/db/schema/index.ts` - export this fork's own
-  modules (`services/panel-build.ts`, `lib/social-auth-providers.ts`, `lib/sso-trusted-origins.ts`,
-  `db/schema/social-auth.ts`) alongside upstream's.
-- `packages/server/package.json` - committed with the `src` exports that `switch:dev` writes, so a
-  fresh clone typechecks without building first. `pnpm build` rewrites it to `dist` and back.
+  `services/social-auth.ts` and `db/schema/social-auth.ts` alongside upstream's.
 - `README.md` and `install.sh` - describe and install this fork's image rather than upstream's.
+  `install.sh` also generates `BETTER_AUTH_SECRET_FILE`, because the panel otherwise signs sessions
+  and encrypts columns with a constant from public source. A panel installed before this keeps that
+  constant. Moving such a panel from the constant to a generated secret keeps its data readable,
+  because `legacyFallbackKeys` in `lib/encryption.ts` holds the constant's key and a row is
+  re-encrypted on its next write. Rows nobody writes stay under the public key until a script
+  re-encrypts them. `apps/dokploy/scripts/migrate-auth-secret.ts` covers only 2FA secrets. Rotating
+  from one generated secret to another has no fallback, so it needs every `encryptedText` column
+  re-encrypted first.
   Upstream's installer is a separate repository; this one is the fork's own.
 - `.env.production` - tracked here with `PORT` and `NODE_ENV`, because `Dockerfile` copies it into
   the image as `.env`. CI overwrites it from `.env.production.example` before the build.
@@ -247,10 +258,6 @@ This fork also carries fixes for defects it found in upstream's code while revie
 one is upstream's file, so a later sync brings upstream's version back the moment upstream fixes it
 itself, which is the point at which the fix here should go:
 
-- `packages/server/src/services/mount.ts` - a file mount's `filePath` is a free-form string, and
-  the write, the `rm -rf` that clears a directory in its place and the delete all run as root on
-  the target host. A path resolving outside the mount's own directory is rejected, so `../code`
-  cannot delete a service's cloned sources.
 - `packages/server/src/utils/dns/route53.ts` - a CNAME is replaced rather than merged into the
   existing record set. Route53 rejects a CNAME set holding more than one value, so merging made
   every repoint of an existing CNAME fail.
@@ -277,13 +284,142 @@ itself, which is the point at which the fix here should go:
   services will be affected".
 - `apps/dokploy/components/dashboard/monitoring/paid/servers/network-chart.tsx` - an absent value
   formats as `0`. The guard tested `Number.isNaN`, which is false for `undefined`.
+- `apps/dokploy/server/api/routers/backup.ts`, `apps/dokploy/server/api/routers/deployment.ts` - a
+  web-server backup requires an owner or admin, from `server/api/utils/web-server-backup-access.ts`.
+  The settings page sends the user's id as `databaseId`, which upstream's check reads as a service
+  that does not exist, so every panel restore failed. An empty `databaseId` skipped that check, so
+  any signed-in user could replace the panel. Drop this once upstream branches on the web-server
+  type before its service check. Upstream's decision to leave these destinations unscoped stays.
+- `apps/dokploy/server/api/routers/settings.ts` - `getWebServerSettings` hides `sshPrivateKey` and
+  the metrics token from members, who read that row for flags such as `remoteServersOnly`. A member
+  with `monitoring: read` still gets the token from `user.getMetricsToken`, because the monitoring
+  page sends it from the browser to the metrics server.
+  `updateEnforceSSO` refuses to enable with no SSO provider registered, and
+  `routers/proprietary/sso.ts` clears the flag when the last provider goes or the first one arrives,
+  because registering tests no login.
+- `packages/server/src/lib/auth.ts`, `apps/dokploy/pages/index.tsx` - enforcement follows
+  `isSsoEnforced` in `services/proprietary/sso.ts`: the stored flag and at least one provider.
+  Upstream made the flag block password, social and passkey sign-in on the server, so a flag with
+  no provider behind it locks every user out with SQL as the only way back. A registered provider
+  that stops working still locks them out. Recover with
+  `UPDATE "webServerSettings" SET "enforceSSO" = false;`. Drop this once upstream checks for a
+  provider.
+- `packages/server/src/services/transfer.ts`, `apps/dokploy/server/api/routers/transfer.ts` - a
+  transfer is refused when it would lose data: an uploaded application has its only copy of the code
+  on the source, and bind copies run inside the panel container, so they find nothing on the way out
+  of the panel host and land in the container's layer on the way in. A compose project's `files`
+  directory is copied, because `removeCompose` deletes it whatever `removeSourceData` says. The
+  control plane is refused as a target under `remoteServersOnly`. Drop each once upstream handles it.
+- `packages/server/src/services/application.ts` - a preview without a build server pushes to no
+  registry. Upstream stopped clearing the registries so that a build server can carry the image to
+  the deploy server, which also pushed every pull request's code to the release registry of every
+  other application, failed the preview on a token that cannot push, and left the image behind on
+  removal. Drop this once upstream limits the push to build servers.
+- `packages/server/src/setup/traefik-setup.ts` - stops Traefik and renames it again when Docker
+  refuses to rename a running container on an overlay network, which Docker 27.5.1 to 29.7.2 do.
+  From [upstream PR #5889](https://github.com/Dokploy/dokploy/pull/5889), open at this sync, along
+  with its cases in `apps/dokploy/__test__/traefik/standalone-traefik-recreate.test.ts`. Take
+  upstream's version once it merges.
+- `packages/server/src/utils/access-log/handler.ts` - cleanup rewrites `access.log` in place, so a
+  container that file-binds it keeps reading the live file. This is upstream's `9b0db9aed`, which
+  landed after v0.31.0. The next sync brings it back.
+- `apps/dokploy/__test__/api/update-server.test.ts` - expects `PANEL_IMAGE` where upstream's test
+  names its own image.
+- `apps/dokploy/server/api/routers/backup.ts` - refuses a schedule whose `databaseType` disagrees with
+  its target: `web-server` with a service id, or a service type with none. The schedule dispatches on
+  the type alone, so a member could otherwise dump the panel. Drop this once upstream checks the pair.
+- `packages/server/src/services/settings.ts` - `reloadDockerResource` restarts the panel with no
+  `--image`. `PANEL_VERSION` has no leading `v` and CI publishes only the prefixed tag, so upstream's
+  command stops the panel and then fails to pull. This one stays while this fork's tags differ.
+- `apps/dokploy/server/api/routers/volume-backups.ts`, `apps/dokploy/server/api/utils/volume-backup-target.ts`,
+  `packages/server/src/db/schema/volume-backups.ts` - volume restore checks the service grant and
+  takes a file name that holds no shell syntax. Create requires exactly one service, of the row's
+  type. Input sets no `appName`, and update changes no service id. Upstream's restore reaches the
+  shell for any member, and upstream's update moves a row to any service. Drop this when upstream
+  checks the grant and narrows these inputs.
+- `packages/server/src/db/schema/backups.ts`, `packages/server/src/db/schema/utils.ts`,
+  `packages/server/src/utils/backups/`, `packages/server/src/utils/volume-backups/` - a backup prefix
+  and compose service name are validated on input and quoted in each command, because a stored
+  value reaches the shell on the service's server. Drop this when upstream does both.
+- `apps/dokploy/server/api/routers/backup.ts`, `apps/dokploy/server/api/utils/web-server-backup-access.ts` -
+  a backup names exactly the service its `databaseType` selects, because upstream checks the grant on
+  the first id and dumps the type's id. A member restores only files under the service's own folder.
+  Owners and admins restore across services. Drop these when upstream scopes both.
+- `apps/dokploy/server/wss/deployment-log-access.ts`, `apps/dokploy/server/wss/listen-deployment.ts` - the
+  log socket tails only a path a deployment recorded, for a caller with access to that deployment's
+  service or server. Upstream's check accepts any path under the base path, which holds SSH keys and
+  certificates. Drop this when upstream ties the path to a row.
+- `packages/server/src/lib/auth.ts`, `packages/server/src/services/proprietary/sso.ts`,
+  `apps/dokploy/server/api/routers/proprietary/sso.ts` - an SSO provider cannot sign in an owner or a
+  member of another organization unless that person registered the provider, and it cannot use the
+  id of a built-in sign-in method. `requireLocalEmailVerified: false` and `trustEmailVerified: true`
+  otherwise let an organization admin's identity provider take any account. Keep this while panels
+  skip email verification.
+- `packages/server/src/services/transfer.ts` - also reads a stack's binds and volumes from its
+  service spec, and refuses a deployed project with no containers or services, because Docker then
+  cannot list its binds. It refuses a volume the transfer would not copy and the cleanup would strand:
+  an external volume, an anonymous volume, or a stack volume on another node. It copies an unlabelled
+  volume named `<appName>_*`, which an earlier transfer created.
+- `packages/server/src/services/logs-and-metrics/service.ts`, `packages/server/src/services/vault-provider.ts` -
+  a stored credential needs re-entering when its destination changes. That covers the Datadog `site`,
+  the CloudWatch `region`, and each vault provider's URL, region or Phase `apiUrl`. Drop this when
+  upstream does so.
+- `packages/server/src/utils/builders/`, `packages/server/src/utils/filesystem/directory.ts` - quote the build
+  path, env file path and removed file mount path, because each can hold shell syntax. Drop this when
+  upstream quotes them.
+- `install.sh` - runs only `deploy_panel` when the `dokploy` service exists. The panel holds the
+  checked ports, so the free port check blocks the documented upgrade, and the host bootstrap
+  recreates Traefik with no env or ports. Drop this when upstream's installer upgrades in place.
+- `packages/server/src/utils/backups/utils.ts` - reads the backup row inside the scheduled job,
+  because a transfer does not re-register the job and the registered row names the old server. The job
+  logs a failure, because node-schedule rethrows a rejected job as an unhandled rejection. The backup
+  command stays out of the panel log, because it holds the database password. Drop each when upstream
+  does so.
+- `packages/server/src/services/deployment.ts` - reads a libsql backup's server, because its log folder
+  otherwise never exists on that server. Drop this when upstream reads it.
+- `packages/server/src/utils/volume-backups/backup.ts`, `packages/server/src/utils/volume-backups/utils.ts` -
+  a volume backup of a remote database runs on that database's server. Upstream runs it on the panel
+  host, which creates an empty volume and uploads an empty archive with status success. Drop this when
+  upstream reads the server of every service type.
+- `packages/server/src/db/schema/utils.ts` - `BUCKET_PATH_REGEX` allows letters of any script, digits,
+  spaces and `. _ - + @ = , : /`, with no `..` segment. Stored prefixes and old file names use these.
+  A stored prefix with any other character needs a new prefix before the row can be edited.
+- `apps/dokploy/components/dashboard/database/backups/handle-backup.tsx`,
+  `apps/dokploy/components/dashboard/database/backups/restore-backup.tsx`,
+  `apps/dokploy/components/dashboard/application/volume-backups/restore-volume-backups.tsx`,
+  `apps/dokploy/components/dashboard/settings/servers/actions/toggle-enforce-sso.tsx` - show the
+  server's refusal in a toast. These refusals otherwise look like a button that does nothing.
+- `Dockerfile` - copies `LICENSE.MD` and `NOTICE` into the image, as Apache-2.0 section 4 requires of a
+  published image. Drop this when upstream's image carries them.
+- `apps/dokploy/server/api/routers/proprietary/sso.ts`, `packages/server/src/lib/auth.ts` - removing a
+  provider deletes its account rows, and better-auth's `/sso/update-provider` and
+  `/sso/delete-provider` routes are closed. A later provider under the same id or issuer would
+  otherwise sign in to those accounts. Drop this when upstream ties account links to the issuer.
+- `apps/dokploy/server/api/routers/settings.ts` - only an owner with an SSO sign-in can enforce SSO,
+  because enforcement blocks every other sign-in. An admin can still turn it off. Drop this when
+  upstream refuses a self-lockout.
+- `packages/server/src/lib/auth.ts` - `trustedProviders` holds only SSO provider ids. Naming GitHub or
+  Google links an account from an unverified address. Drop this when upstream stops trusting social
+  providers by name.
+- `apps/dokploy/migration.ts` - exits non-zero on a failed migration. Upstream's catch swallows the
+  error, so `migration && server` boots on a partial schema. Drop this once upstream exits.
+- `packages/server/src/services/logs-and-metrics/service.ts` - refuses a new endpoint that arrives
+  without the stored credentials, which readers cannot see and a test would send to the new host.
+  Drop this once upstream checks the endpoint.
+- `packages/server/src/services/transfer.ts` - also refuses a compose project with a writable bind
+  outside its `files` directory, read from Docker, because a compose file's binds are in no mount row.
+  Drop this once upstream copies them.
+- `apps/dokploy/__test__/logs-and-metrics/telemetry-provider-service.test.ts`,
+  `apps/dokploy/__test__/wss/listen-deployment.test.ts` - add cases for the telemetry guards and the
+  deployment log guard above. Keep them when taking upstream's versions of these tests.
 
 Take upstream's changes to any of these deliberately rather than by default.
 
-The two lists above are the whole set. `git diff HEAD <NEW> -- . ':(exclude)*/proprietary/*' --name-only`
+The two lists above are the whole set. `git diff --name-only HEAD <NEW> -- . ':(exclude)*/proprietary/*'`
 after a sync prints these files, together with the ones this fork adds rather than edits: the
 replacement modules named above, `UPSTREAM.md`, `NOTICE`, its migration under
-`apps/dokploy/drizzle/`, and its own tests under `apps/dokploy/__test__/`. Anything else it names is
+`apps/dokploy/drizzle/`, `apps/dokploy/scripts/panel-version.mjs`,
+`packages/server/src/services/social-auth.ts`, and its own tests under `apps/dokploy/__test__/`. Anything else it names is
 a hunk the sync dropped or an undocumented divergence, and one of the two has to be fixed before the
 sync is done.
 
@@ -296,6 +432,40 @@ cd packages/server && ./node_modules/.bin/tsc --noEmit
 
 If a sync adds an import from a `proprietary` path that nothing here provides, add the symbol to the
 matching replacement module.
+
+`pnpm build` rewrites `packages/server/package.json` to its `dist` exports and leaves it there. Run
+`pnpm --filter=@dokploy/server run switch:dev` before committing, because the typecheck of
+`apps/dokploy` needs the `src` exports upstream commits.
+
+## Accepted risks
+
+- A member with a service grant can get root on that service's host. Upstream's model lets them bind
+  `/var/run/docker.sock` or any host path, and name any volume in a volume backup or restore, including
+  `dokploy-postgres`. `mount.volumeName` has no pattern either. This fork keeps that model, so grant a
+  service only to someone you would trust with its host.
+- An organization admin acts on the whole panel. They can back up or restore the panel, replace the
+  Google client, and enforce SSO if they are an owner. Enforcement covers every organization. Give
+  admin only to people you would trust with the panel.
+- A rogue SSO provider can accept another organization's invitation. Its admin asserts the invited
+  address, better-auth creates the user, and accepting compares only the email. This needs a panel with
+  several organizations and an untrusted organization admin.
+- The SSO link rule runs when an account row is created, not at each sign-in. A provider keeps its
+  sign-in for a user who later joins another organization or becomes an owner. Promote a user only if
+  you trust the identity providers they have linked.
+- An SSO account links on a provider's verified email claim, so a provider can sign in any new address
+  it asserts. A provider stays limited by the link rule for existing users.
+- A panel moved from a licensed upstream install posts stored licence keys and its public IP to
+  `licenses-api.dokploy.com` every three days. `packages/server/src/utils/crons/enterprise.ts` runs on
+  every start. Nothing in this fork writes a key.
+- A member with `backup:read` can list every object name in a destination, because the listing names
+  no service. Restoring still requires a file in the service's own folder.
+- Members lose AI access in this release, because upstream gates it behind a permission static members
+  do not hold. This fork has no override.
+- The panel fetches templates from `templates.dokploy.com` by default when someone opens the template
+  list. It sends no panel data, and an operator can set another base URL.
+- OIDC registration fails for a provider whose token or userinfo endpoint is on a different origin from
+  its issuer, which includes Google and Entra. `lib/sso-trusted-origins.ts` trusts only the issuer and
+  discovery origins.
 
 ## Panel sign-in
 

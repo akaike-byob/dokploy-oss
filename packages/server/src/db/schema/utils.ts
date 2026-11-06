@@ -44,6 +44,34 @@ export const APP_NAME_MESSAGE =
 /** Docker volume name: must start alphanumeric, then letters/numbers/._- only. Safe for shell. */
 export const VOLUME_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 
+/**
+ * A folder inside a bucket. It reaches rclone commands on the service's server, and `..` would
+ * point retention at another service's folder.
+ */
+export const BUCKET_PATH_REGEX =
+	/^(?!(?:.*\/)?\.\.(?:\/|$))[\p{L}\p{M}\p{N}_./ +@=,:-]*$/u;
+
+export const BUCKET_PATH_MESSAGE =
+	"A bucket path can only contain letters, numbers, spaces, slashes and the characters . _ - + @ = , :, and no .. segment";
+
+/** The Compose specification's pattern for a service name. Empty means no compose service. */
+export const COMPOSE_SERVICE_NAME_REGEX = /^[a-zA-Z0-9._-]*$/;
+
+export const COMPOSE_SERVICE_NAME_MESSAGE =
+	"A compose service name can only contain letters, numbers, dots, underscores and hyphens";
+
+/**
+ * The callback finds an account by provider id and subject before any link check runs, and the
+ * identity provider picks the subject. A provider named after a built-in method would sign in to
+ * that method's accounts: a password account's subject is the user id.
+ */
+export const RESERVED_SSO_PROVIDER_IDS = [
+	"credential",
+	"github",
+	"google",
+	"scim",
+];
+
 export const VOLUME_NAME_MESSAGE =
 	"Volume name must start with a letter or number and contain only letters, numbers, dots, underscores and hyphens";
 

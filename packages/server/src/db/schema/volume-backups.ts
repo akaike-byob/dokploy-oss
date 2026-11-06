@@ -18,6 +18,10 @@ import {
 	generateAppName,
 	VOLUME_NAME_MESSAGE,
 	VOLUME_NAME_REGEX,
+	BUCKET_PATH_MESSAGE,
+	BUCKET_PATH_REGEX,
+	COMPOSE_SERVICE_NAME_MESSAGE,
+	COMPOSE_SERVICE_NAME_REGEX,
 } from "./utils";
 
 export const volumeBackups = pgTable("volume_backup", {
@@ -119,13 +123,32 @@ export const volumeBackupsRelations = relations(
 
 export const createVolumeBackupSchema = createInsertSchema(volumeBackups, {
 	volumeName: z.string().regex(VOLUME_NAME_REGEX, VOLUME_NAME_MESSAGE),
+	prefix: z.string().regex(BUCKET_PATH_REGEX, BUCKET_PATH_MESSAGE),
+	serviceName: z
+		.string()
+		.regex(COMPOSE_SERVICE_NAME_REGEX, COMPOSE_SERVICE_NAME_MESSAGE)
+		.nullable()
+		.optional(),
 }).omit({
 	volumeBackupId: true,
+	appName: true,
 });
 
-export const updateVolumeBackupSchema = createVolumeBackupSchema.extend({
-	volumeBackupId: z.string().min(1),
-});
+// The grant check reads the stored row's service, so an update cannot be allowed to change it.
+export const updateVolumeBackupSchema = createVolumeBackupSchema
+	.omit({
+		applicationId: true,
+		postgresId: true,
+		mysqlId: true,
+		mariadbId: true,
+		mongoId: true,
+		redisId: true,
+		libsqlId: true,
+		composeId: true,
+	})
+	.extend({
+		volumeBackupId: z.string().min(1),
+	});
 
 export const apiFindOneVolumeBackup = z.object({
 	volumeBackupId: z.string().min(1),

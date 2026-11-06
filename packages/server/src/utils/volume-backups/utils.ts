@@ -4,7 +4,10 @@ import {
 	createDeploymentVolumeBackup,
 	updateDeploymentStatus,
 } from "@dokploy/server/services/deployment";
-import { findDestinationById } from "@dokploy/server/services/destination";
+import {
+	findDestinationById,
+	findDestinationByIdForOrganization,
+} from "@dokploy/server/services/destination";
 import { findVolumeBackupById } from "@dokploy/server/services/volume-backups";
 import {
 	execAsync,
@@ -13,7 +16,12 @@ import {
 import { scheduledJobs, scheduleJob } from "node-schedule";
 import { getS3Credentials, normalizeS3Path } from "../backups/utils";
 import { sendVolumeBackupNotifications } from "../notifications/volume-backup";
-import { backupVolume, getVolumeServiceAppName } from "./backup";
+import {
+	backupVolume,
+	getVolumeServiceAppName,
+	getVolumeServiceServerId,
+} from "./backup";
+import { quote } from "shell-quote";
 
 // Helper functions to extract project info from volume backup
 const getProjectName = (
@@ -74,7 +82,7 @@ export const removeVolumeBackupJob = async (volumeBackupId: string) => {
 	currentJob?.cancel();
 };
 
-const cleanupOldVolumeBackups = async (
+export const cleanupOldVolumeBackups = async (
 	volumeBackup: Awaited<ReturnType<typeof findVolumeBackupById>>,
 	serverId?: string | null,
 ) => {
@@ -86,7 +94,9 @@ const cleanupOldVolumeBackups = async (
 	try {
 		const rcloneFlags = getS3Credentials(destination);
 		const s3AppName = getVolumeServiceAppName(volumeBackup);
-		const backupFilesPath = `:s3:${destination.bucket}/${s3AppName}/${normalizeS3Path(prefix || "")}`;
+		const backupFilesPath = quote([
+			`:s3:${destination.bucket}/${s3AppName}/${normalizeS3Path(prefix || "")}`,
+		]);
 		const listCommand = `rclone lsf ${rcloneFlags.join(" ")} --include \"${volumeName}-*.tar\" ${backupFilesPath}`;
 		const sortAndPick = `sort -r | tail -n +$((${keepLatestCount}+1)) | xargs -I{}`;
 		const deleteCommand = `rclone delete ${rcloneFlags.join(" ")} ${backupFilesPath}{}`;
@@ -104,15 +114,18 @@ const cleanupOldVolumeBackups = async (
 
 export const runVolumeBackup = async (volumeBackupId: string) => {
 	const volumeBackup = await findVolumeBackupById(volumeBackupId);
-	const serverId =
-		volumeBackup.application?.serverId || volumeBackup.compose?.serverId;
+	const serverId = getVolumeServiceServerId(volumeBackup);
+	const projectName = getProjectName(volumeBackup);
+	const organizationId = getOrganizationId(volumeBackup);
+	await findDestinationByIdForOrganization(
+		volumeBackup.destinationId,
+		organizationId,
+	);
 	const deployment = await createDeploymentVolumeBackup({
 		volumeBackupId: volumeBackup.volumeBackupId,
 		title: "Volume Backup",
 		description: "Volume Backup",
 	});
-	const projectName = getProjectName(volumeBackup);
-	const organizationId = getOrganizationId(volumeBackup);
 	try {
 		const command = await backupVolume(volumeBackup);
 

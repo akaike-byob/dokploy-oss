@@ -1,15 +1,19 @@
 import { db } from "@dokploy/server/db";
 import {
+	account,
+	RESERVED_SSO_PROVIDER_IDS,
 	socialAuthCredentialsSchema,
 	ssoProvider,
 } from "@dokploy/server/db/schema";
 import { auth } from "@dokploy/server/lib/auth";
+import { hasSsoProvider } from "@dokploy/server/services/proprietary/sso";
 import {
 	isSocialProviderConfigured,
 	removeSocialAuthCredentials,
 	saveSocialAuthCredentials,
 	socialAuthClientId,
 } from "@dokploy/server/services/social-auth";
+import { updateWebServerSettings } from "@dokploy/server/services/web-server-settings";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -26,7 +30,10 @@ const oidcProviderInput = z.object({
 		.regex(
 			/^[a-z0-9-]+$/,
 			"Use lowercase letters, numbers and hyphens: it appears in the callback URL",
-		),
+		)
+		.refine((providerId) => !RESERVED_SSO_PROVIDER_IDS.includes(providerId), {
+			message: `A provider id cannot be ${RESERVED_SSO_PROVIDER_IDS.join(", ")}`,
+		}),
 	issuer: z.string().url(),
 	domain: z
 		.string()
@@ -87,6 +94,8 @@ export const ssoRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			requireAdmin(ctx.user.role);
 
+			const isFirstProvider = !(await hasSsoProvider());
+
 			try {
 				await auth.registerSSOProvider({
 					body: {
@@ -116,6 +125,12 @@ export const ssoRouter = createTRPCRouter({
 				});
 			}
 
+			// Registering tests no login, so a flag left over from an earlier provider must not start
+			// blocking every password sign-in at this moment.
+			if (isFirstProvider) {
+				await updateWebServerSettings({ enforceSSO: false });
+			}
+
 			return { providerId: input.providerId };
 		}),
 
@@ -124,14 +139,24 @@ export const ssoRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			requireAdmin(ctx.user.role);
 
-			await db
+			const removedProviders = await db
 				.delete(ssoProvider)
 				.where(
 					and(
 						eq(ssoProvider.providerId, input.providerId),
 						eq(ssoProvider.organizationId, ctx.session.activeOrganizationId),
 					),
-				);
+				)
+				.returning({ providerId: ssoProvider.providerId });
+
+			// A later provider registered under this id would otherwise sign in to these accounts.
+			if (removedProviders.length > 0) {
+				await db.delete(account).where(eq(account.providerId, input.providerId));
+			}
+
+			if (!(await hasSsoProvider())) {
+				await updateWebServerSettings({ enforceSSO: false });
+			}
 
 			return { removed: input.providerId };
 		}),

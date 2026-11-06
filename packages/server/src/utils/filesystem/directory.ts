@@ -3,6 +3,7 @@ import path from "node:path";
 import { paths } from "@dokploy/server/constants";
 import type { Application } from "@dokploy/server/services/application";
 import { execAsync, execAsyncRemote } from "../process/execAsync";
+import { quote } from "shell-quote";
 
 export const recreateDirectory = async (pathFolder: string): Promise<void> => {
 	try {
@@ -31,13 +32,13 @@ export const removeDirectoryIfExistsContent = async (
 	path: string,
 ): Promise<void> => {
 	if (fs.existsSync(path) && fs.readdirSync(path).length !== 0) {
-		await execAsync(`rm -rf ${path}`);
+		await execAsync(`rm -rf ${quote([path])}`);
 	}
 };
 
 export const removeFileOrDirectory = async (path: string) => {
 	try {
-		await execAsync(`rm -rf ${path}`);
+		await execAsync(`rm -rf ${quote([path])}`);
 	} catch (error) {
 		console.error(`Error removing ${path}: ${error}`);
 		throw error;
@@ -141,5 +142,6 @@ export const getDockerContextPath = (application: Application) => {
 	if (!dockerContextPath) {
 		return null;
 	}
+
 	return path.join(APPLICATIONS_PATH, appName, "code", dockerContextPath);
 };
